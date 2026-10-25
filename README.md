@@ -48,6 +48,26 @@ docker run -p 7000:7000 s-library
 | `PORT` | `7000` | Port to listen on. |
 | `PUBLIC_URL` | from the request (`Host` / `X-Forwarded-*`) | Public base URL, e.g. `https://s-library.example.com`, if the addon sits behind a proxy that doesn't send forwarding headers. |
 
+### Hosting on cPanel
+
+Many cPanel hosts can run Node.js apps under **Software → Setup Node.js App**. If your cPanel doesn't have it, ask your host to enable Node.js.
+
+1. **Domain:** under **Domains**, create the (sub)domain, for example `s-library.example.com`. If the domain's DNS is managed somewhere else, add an `A` record there pointing to your cPanel server's IP.
+2. **HTTPS:** under **Security → SSL/TLS Status**, select the domain and click **Run AutoSSL**.
+3. **Files:** upload the project, for example as a ZIP via **File Manager**, and extract it into a folder in your home directory outside `public_html`, such as `s-library-app`. `app.js` must sit directly inside that folder.
+4. **App:** in **Setup Node.js App**, click **Create Application** and set:
+   - Node.js version: 18 or newer (the newest available is best)
+   - Application mode: Production
+   - Application root: `s-library-app`
+   - Application URL: your domain
+   - Application startup file: `app.js`
+   - Environment variable `PUBLIC_URL`: `https://s-library.example.com`
+
+   Click **Create**. There is nothing to `npm install`, because S-library has no dependencies.
+5. **Check:** `https://s-library.example.com/manifest.json` should show a short JSON text starting with `{"id":"community.slibrary"`. The configure page is at `https://s-library.example.com/configure`.
+
+To update, upload and extract the new files over the old ones, then click **Restart** in **Setup Node.js App**.
+
 Run the tests with `npm test`. The configure-page test runs only when Playwright is installed and is skipped otherwise.
 
 ## How it works
@@ -87,6 +107,7 @@ Stremio keeps its own copy of each installed addon's manifest, and Board rows co
 
 | File | Purpose |
 | --- | --- |
+| `app.js` | Starts the server (`npm start`, Docker, cPanel) |
 | `src/server.js` | HTTP server and routes |
 | `src/addon.js` | Manifest, catalog, meta and stream responses |
 | `src/shared.js` | Folder model and colors, shared by the server and the configure page |

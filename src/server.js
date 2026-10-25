@@ -173,11 +173,4 @@ function createServer() {
   });
 }
 
-if (require.main === module) {
-  const port = Number(process.env.PORT) || 7000;
-  createServer().listen(port, () => {
-    console.log(`S-library running at http://127.0.0.1:${port}/configure`);
-  });
-}
-
 module.exports = { createServer };
