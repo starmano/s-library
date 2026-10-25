@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S-library</title>
+<meta name="description" content="Create folders in your Stremio library, each with its own name, description and color.">
+<link rel="icon" href="/img/logo.png">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0d0b14;
+    --surface: #17141f;
+    --surface-2: #211d2c;
+    --border: #2e2940;
+    --text: #f3f1fa;
+    --muted: #a49fb9;
+    --accent: #7b5bf5;
+    --accent-hover: #8d71f7;
+    --danger: #e5484d;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(1200px 600px at 10% -10%, #2a1f55 0%, transparent 60%), var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  [hidden] { display: none !important; }
+  h1, h2 { margin: 0; line-height: 1.2; }
+  h2 { font-size: 18px; }
+  a { color: var(--accent-hover); }
+  code { background: var(--surface-2); padding: 1px 6px; border-radius: 6px; font-size: 13px; word-break: break-all; }
+  .muted { color: var(--muted); }
+  .top { display: flex; align-items: center; gap: 14px; max-width: 760px; margin: 0 auto; padding: 32px 16px 8px; }
+  .top img { border-radius: 12px; }
+  .top h1 { font-size: 24px; }
+  .top p { margin: 2px 0 0; color: var(--muted); }
+  main { max-width: 760px; margin: 0 auto; padding: 8px 16px 48px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-top: 16px; }
+  .card > p { margin: 8px 0 0; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .stack { display: grid; gap: 12px; margin-top: 16px; }
+  label.field, .field { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
+  input, textarea {
+    width: 100%; font: inherit; color: var(--text); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+  }
+  textarea { resize: vertical; min-height: 72px; }
+  input:focus-visible, textarea:focus-visible, button:focus-visible, .button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  button, .button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    font: inherit; font-weight: 600; color: var(--text); text-decoration: none; cursor: pointer;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 16px;
+  }
+  button:hover, .button:hover { border-color: #4a4266; }
+  button:disabled { opacity: .6; cursor: progress; }
+  .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .danger { color: #ff8589; }
+  .link { background: none; border: 0; padding: 0; color: var(--accent-hover); font-weight: 500; }
+  .icon { padding: 7px 10px; min-width: 36px; }
+  .error { color: #ff8589; margin: 12px 0 0; }
+  details { margin-top: 16px; color: var(--muted); }
+  summary { cursor: pointer; color: var(--text); }
+  details form { display: flex; gap: 8px; margin-top: 8px; }
+  .account { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; color: var(--muted); margin-top: 16px; }
+
+  .folders { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 10px; }
+  .folder {
+    --c: #6e6a86;
+    display: grid; grid-template-columns: 56px 1fr auto; gap: 14px; align-items: center;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px;
+  }
+  .folder-icon { width: 56px; aspect-ratio: 2 / 3; border-radius: 8px; object-fit: cover; }
+  .folder-name { font-weight: 700; overflow-wrap: anywhere; }
+  .folder-name::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 8px; }
+  .folder-meta { font-size: 13px; color: var(--muted); }
+  .folder-desc { margin: 2px 0 0; font-size: 14px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .folder-tools { display: flex; gap: 6px; }
+  .empty { text-align: center; padding: 28px 12px 8px; color: var(--muted); }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .note { font-size: 13px; color: var(--muted); margin: 0; }
+  .actions + .note { margin-top: 12px; }
+
+  dialog {
+    width: min(680px, 100vw - 24px); max-height: calc(100vh - 24px); padding: 0;
+    color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  dialog::backdrop { background: rgb(5 4 10 / .75); }
+  dialog form { display: grid; gap: 18px; padding: 22px; }
+  dialog footer { display: flex; gap: 10px; flex-wrap: wrap; position: sticky; bottom: -22px; margin: 0 -22px -22px; padding: 14px 22px 22px; background: var(--surface); border-top: 1px solid var(--border); }
+  .spacer { flex: 1; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend { padding: 0; margin-bottom: 6px; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+  .swatch { position: relative; }
+  .swatch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .swatch span { display: block; width: 34px; height: 34px; border-radius: 50%; background: var(--c); border: 2px solid rgb(255 255 255 / .15); }
+  .swatch.none span { background: none; border: 2px dashed var(--muted); }
+  .swatch input:checked + span { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--text); }
+  .swatch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 5px; }
+
+  .picked { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; font-weight: 400; }
+  .picked li { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 4px 3px 12px; max-width: 100%; }
+  .picked li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .picked button { padding: 2px 8px; border-radius: 999px; border: 0; background: none; color: var(--muted); }
+  .tabs { display: flex; gap: 6px; }
+  .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .results { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 320px; overflow-y: auto; font-weight: 400; }
+  .results li { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; padding: 6px; border-radius: 10px; background: var(--surface-2); }
+  .thumb { width: 36px; aspect-ratio: 2 / 3; border-radius: 5px; object-fit: cover; background: var(--border); }
+  .results .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .results small { display: block; color: var(--muted); text-transform: capitalize; }
+  .results button[aria-pressed="true"] { background: none; color: var(--muted); }
+  .hint { color: var(--muted); font-weight: 400; font-size: 14px; margin: 0; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 16px;
+    transition: opacity .2s, transform .2s; max-width: calc(100vw - 32px);
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.bad { border-color: var(--danger); }
+
+  @media (max-width: 560px) {
+    .folder { grid-template-columns: 44px 1fr; }
+    .folder-icon { width: 44px; }
+    .folder-tools { grid-column: 1 / -1; justify-content: flex-end; }
+    dialog { width: 100vw; max-width: 100vw; max-height: 100vh; height: 100vh; border-radius: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <img src="/img/logo.png" alt="" width="48" height="48">
+  <div>
+    <h1>S-library</h1>
+    <p>Folders for your Stremio library</p>
+  </div>
+</header>
+
+<main>
+  <section id="connect" class="card">
+    <h2>Connect your Stremio account</h2>
+    <p class="muted">Folders are saved in your own Stremio library, so they follow you to every device.</p>
+    <form id="login-form" class="stack">
+      <label class="field">Email <input name="email" type="email" autocomplete="username" required></label>
+      <label class="field">Password <input name="password" type="password" autocomplete="current-password" required></label>
+      <div><button class="primary" type="submit">Sign in</button></div>
+      <p class="note">Your password is passed on to Stremio to sign in and is never stored.</p>
+    </form>
+    <details>
+      <summary>Signed up with Facebook, Google or Apple?</summary>
+      <p>Connect with your auth key instead. Open <a href="https://web.stremio.com" target="_blank" rel="noopener">Stremio Web</a> while signed in, open the browser console and run
+        <code>JSON.parse(localStorage.getItem("profile")).auth.key</code></p>
+      <form id="key-form">
+        <input name="key" placeholder="Auth key" autocomplete="off" required>
+        <button type="submit">Connect</button>
+      </form>
+    </details>
+    <p id="connect-error" class="error" role="alert" hidden></p>
+  </section>
+
+  <div id="app" hidden>
+    <div class="account">
+      <span>Connected to <b id="account"></b></span>
+      <button id="sign-out" class="link" type="button">Sign out</button>
+    </div>
+
+    <section class="card">
+      <div class="row">
+        <h2>Your folders</h2>
+        <button id="new-folder" class="primary" type="button">+ New folder</button>
+      </div>
+      <ul id="folders" class="folders"></ul>
+      <p id="no-folders" class="empty" hidden>No folders yet. Create your first one.</p>
+    </section>
+
+    <section class="card">
+      <h2>Install the addon</h2>
+      <p class="muted">Install once. Folder changes reach Stremio the next time you open or switch back to it.</p>
+      <div class="actions">
+        <a id="install" class="button primary">Install in Stremio</a>
+        <a id="install-web" class="button" target="_blank" rel="noopener">Install in Stremio Web</a>
+        <button id="copy" type="button">Copy addon link</button>
+      </div>
+      <p class="note">Your addon link contains your Stremio auth key. Don't share it.</p>
+    </section>
+  </div>
+</main>
+
+<dialog id="editor" aria-labelledby="editor-title">
+  <form id="editor-form">
+    <h2 id="editor-title">New folder</h2>
+    <label class="field"><span>Name</span>
+      <input id="f-name" maxlength="60" required>
+    </label>
+    <label class="field"><span>Description <span class="muted">(optional)</span></span>
+      <textarea id="f-description" maxlength="500" rows="3"></textarea>
+    </label>
+    <fieldset class="field">
+      <legend>Color <span class="muted">(optional)</span></legend>
+      <div id="f-colors" class="swatches"></div>
+    </fieldset>
+    <div class="field">
+      <span>Titles in this folder <span id="f-count" class="muted"></span></span>
+      <ul id="f-items" class="picked"></ul>
+      <p id="f-items-empty" class="hint">Nothing here yet. Add titles below.</p>
+    </div>
+    <div class="field">
+      <span>Add titles</span>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-source="library" aria-selected="true">Your library</button>
+        <button type="button" role="tab" data-source="search" aria-selected="false">Search Stremio</button>
+      </div>
+      <input id="f-query" type="search" aria-label="Find titles" autocomplete="off">
+      <ul id="f-results" class="results"></ul>
+      <p id="f-results-hint" class="hint" hidden></p>
+    </div>
+    <footer>
+      <button id="f-delete" class="danger" type="button">Delete folder</button>
+      <span class="spacer"></span>
+      <button id="f-cancel" type="button">Cancel</button>
+      <button id="f-save" class="primary" type="submit">Save</button>
+    </footer>
+  </form>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="/shared.js"></script>
+<script>
+(() => {
+  'use strict';
+  const S = window.SLibrary;
+  const $ = (selector) => document.querySelector(selector);
+  const RESULTS_SHOWN = 100;
+
+  const state = {
+    authKey: null,
+    titles: [],            // the user's library (movies, series, ...)
+    raw: new Map(),        // folder library items by _id, kept so edits preserve unknown fields
+    folders: [],
+    draft: null,           // folder being edited
+    source: 'library',
+    searchResults: [],
+    searching: false,
+    searchSeq: 0
+  };
+
+  // Tiny DOM helper; text is always set via text nodes, never as HTML.
+  function h(tag, props, ...children) {
+    const el = document.createElement(tag);
+    for (const [key, value] of Object.entries(props || {})) {
+      if (value === null || value === undefined || value === false) continue;
+      if (key.startsWith('on')) el.addEventListener(key.slice(2), value);
+      else if (key === 'style') el.style.cssText = value;
+      else el.setAttribute(key, value === true ? '' : value);
+    }
+    el.append(...children.flat().filter((child) => child !== null && child !== undefined && child !== false));
+    return el;
+  }
+
+  function thumb(src, className) {
+    if (!src) return h('div', { class: className });
+    const img = h('img', { class: className, src, alt: '', loading: 'lazy' });
+    img.addEventListener('error', () => img.replaceWith(h('div', { class: className })), { once: true });
+    return img;
+  }
+
+  let toastTimer;
+  function toast(message, bad) {
+    const el = $('#toast');
+    el.textContent = message;
+    el.classList.toggle('bad', Boolean(bad));
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+  }
+
+  async function api(method, body) {
+    const res = await fetch('/api/' + method, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => null);
+    if (!data || data.error || !('result' in data)) {
+      throw new Error((data && data.error && data.error.message) || 'Something went wrong. Try again.');
+    }
+    return data.result;
+  }
+
+  async function put(changes) {
+    const result = await api('datastorePut', { authKey: state.authKey, collection: 'libraryItem', changes });
+    refreshInstalledAddon().catch(() => {});
+    return result;
+  }
+
+  // Stremio keeps its own copy of each installed addon's manifest, and the Board shows one row per
+  // catalog in that copy. After a change, give S-library's entry the fresh manifest (with the new
+  // folder rows). Other addons in the list are left exactly as they are.
+  async function refreshInstalledAddon() {
+    const suffix = '/' + S.encodeConfig({ k: state.authKey }) + '/manifest.json';
+    const { addons } = await api('addonCollectionGet', { authKey: state.authKey, update: false });
+    const ours = (Array.isArray(addons) ? addons : []).filter((addon) =>
+      addon && typeof addon.transportUrl === 'string' && addon.transportUrl.endsWith(suffix));
+    if (!ours.length) return;
+    for (const addon of ours) {
+      const manifest = await (await fetch(addon.transportUrl, { cache: 'no-store' })).json();
+      if (!manifest || manifest.id !== addon.manifest.id) return;
+      addon.manifest = manifest;
+    }
+    await api('addonCollectionSet', { authKey: state.authKey, addons });
+  }
+
+  async function busy(button, task) {
+    button.disabled = true;
+    try {
+      return await task();
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function countLabel(n) {
+    return n === 1 ? '1 title' : n + ' titles';
+  }
+
+  // ---- Account ----
+
+  async function connect(authKey, account) {
+    const items = await api('datastoreGet', { authKey, collection: 'libraryItem', ids: [], all: true });
+    state.authKey = authKey;
+    state.raw = new Map();
+    const folders = [];
+    const titles = [];
+    for (const item of items) {
+      if (S.isFolderItem(item)) {
+        state.raw.set(item._id, item);
+        const folder = S.fromLibraryItem(item);
+        if (!folder.removed) folders.push(folder);
+      } else if (item && !item.removed && !item.temp && typeof item._id === 'string' && item.type !== 'other') {
+        titles.push({ id: item._id, type: item.type, name: item.name || item._id, poster: item.poster || undefined });
+      }
+    }
+    state.folders = S.sortFolders(folders);
+    state.titles = titles.sort((a, b) => a.name.localeCompare(b.name));
+    $('#account').textContent = account;
+    $('#connect').hidden = true;
+    $('#app').hidden = false;
+    renderFolders();
+    renderInstall();
+  }
+
+  function showConnectError(message) {
+    const el = $('#connect-error');
+    el.textContent = message;
+    el.hidden = !message;
+  }
+
+  $('#login-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    showConnectError('');
+    busy(form.querySelector('button'), async () => {
+      try {
+        const result = await api('login', {
+          type: 'Login',
+          email: form.email.value.trim(),
+          password: form.password.value,
+          facebook: false
+        });
+        form.reset();
+        await connect(result.authKey, (result.user && result.user.email) || 'your Stremio account');
+      } catch (err) {
+        showConnectError(err.message);
+      }
+    });
+  });
+
+  $('#key-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    showConnectError('');
+    busy(form.querySelector('button'), async () => {
+      try {
+        await connect(form.key.value.trim().replace(/^"|"$/g, ''), 'your Stremio account');
+        form.reset();
+      } catch (err) {
+        showConnectError(err.message);
+      }
+    });
+  });
+
+  $('#sign-out').addEventListener('click', () => {
+    if (/^\/[\w-]+\/configure/.test(location.pathname)) {
+      location.href = '/configure';
+      return;
+    }
+    state.authKey = null;
+    $('#app').hidden = true;
+    $('#connect').hidden = false;
+  });
+
+  // ---- Install ----
+
+  function addonUrl() {
+    return location.origin + '/' + S.encodeConfig({ k: state.authKey }) + '/manifest.json';
+  }
+
+  function renderInstall() {
+    const url = addonUrl();
+    $('#install').href = url.replace(/^https?:\/\//, 'stremio://');
+    // Stremio turns stremio:// links into https://, so the button can't work for a local http server.
+    $('#install').hidden = location.protocol !== 'https:';
+    $('#install-web').href = 'https://web.stremio.com/#/addons?addon=' + encodeURIComponent(url);
+  }
+
+  $('#copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(addonUrl());
+      toast('Addon link copied');
+    } catch (_) {
+      window.prompt('Copy your addon link:', addonUrl());
+    }
+  });
+
+  // ---- Folder list ----
+
+  function renderFolders() {
+    const list = $('#folders');
+    list.replaceChildren(...state.folders.map((folder, index) => h('li', { class: 'folder', style: '--c:' + S.colorOf(folder.color).hex },
+      h('img', { class: 'folder-icon', src: S.posterUrl(location.origin, folder.color), alt: '' }),
+      h('div', null,
+        h('div', { class: 'folder-name' }, folder.name),
+        h('div', { class: 'folder-meta' }, countLabel(folder.items.length)),
+        folder.description ? h('p', { class: 'folder-desc' }, folder.description) : null
+      ),
+      h('div', { class: 'folder-tools' },
+        h('button', { type: 'button', class: 'icon', 'aria-label': 'Move ' + folder.name + ' up', disabled: index === 0, onclick: (e) => move(e.currentTarget, index, -1) }, '↑'),
+        h('button', { type: 'button', class: 'icon', 'aria-label': 'Move ' + folder.name + ' down', disabled: index === state.folders.length - 1, onclick: (e) => move(e.currentTarget, index, 1) }, '↓'),
+        h('button', { type: 'button', onclick: () => openEditor(folder) }, 'Edit')
+      )
+    )));
+    $('#no-folders').hidden = state.folders.length > 0;
+  }
+
+  function move(button, index, delta) {
+    const target = index + delta;
+    if (target < 0 || target >= state.folders.length) return;
+    const folders = state.folders.slice();
+    [folders[index], folders[target]] = [folders[target], folders[index]];
+    const reordered = folders.map((folder, i) => Object.assign({}, folder, { order: i }));
+    const changes = reordered
+      .filter((folder, i) => folders[i].order !== i)
+      .map((folder) => S.toLibraryItem(folder, { baseUrl: location.origin, previous: state.raw.get(S.ID_PREFIX + folder.id) }));
+    busy(button, async () => {
+      try {
+        await put(changes);
+        changes.forEach((item) => state.raw.set(item._id, item));
+        state.folders = reordered;
+        renderFolders();
+      } catch (err) {
+        toast(err.message, true);
+      }
+    });
+  }
+
+  // ---- Folder editor ----
+
+  const editor = $('#editor');
+  const form = $('#editor-form');
+
+  $('#f-colors').append(
+    h('label', { class: 'swatch none', title: 'No color' },
+      h('input', { type: 'radio', name: 'color', value: 'none', 'aria-label': 'No color' }), h('span')),
+    ...Object.entries(S.COLORS).map(([key, color]) => h('label', { class: 'swatch', title: color.label },
+      h('input', { type: 'radio', name: 'color', value: key, 'aria-label': color.label }),
+      h('span', { style: '--c:' + color.hex })))
+  );
+
+  function newId() {
+    const bytes = crypto.getRandomValues(new Uint8Array(8));
+    return Array.from(bytes, (b) => (b % 36).toString(36)).join('');
+  }
+
+  function openEditor(folder) {
+    state.draft = folder
+      ? Object.assign({}, folder, { items: folder.items.slice() })
+      : {
+          id: newId(),
+          name: '',
+          description: '',
+          color: null,
+          items: [],
+          order: state.folders.reduce((max, f) => Math.max(max, f.order + 1), 0),
+          isNew: true
+        };
+    $('#editor-title').textContent = folder ? 'Edit folder' : 'New folder';
+    $('#f-name').value = state.draft.name;
+    $('#f-description').value = state.draft.description;
+    form.color.value = state.draft.color || 'none';
+    $('#f-delete').hidden = !folder;
+    $('#f-query').value = '';
+    setSource('library');
+    renderPicked();
+    editor.showModal();
+    $('#f-name').focus();
+  }
+
+  function hasItem(id) {
+    return state.draft.items.some((item) => item.id === id);
+  }
+
+  function toggleItem(title) {
+    const items = state.draft.items;
+    if (hasItem(title.id)) {
+      state.draft.items = items.filter((item) => item.id !== title.id);
+    } else if (items.length >= S.LIMITS.items) {
+      toast('A folder can hold up to ' + S.LIMITS.items + ' titles.', true);
+      return;
+    } else {
+      items.push({ id: title.id, type: title.type, name: title.name, poster: title.poster });
+    }
+    renderPicked();
+    renderResults();
+  }
+
+  function renderPicked() {
+    const items = state.draft.items;
+    $('#f-items').replaceChildren(...items.map((item) => h('li', null,
+      h('span', { title: item.name }, item.name),
+      h('button', { type: 'button', 'aria-label': 'Remove ' + item.name, onclick: () => toggleItem(item) }, '✕')
+    )));
+    $('#f-count').textContent = items.length ? '(' + items.length + ')' : '';
+    $('#f-items-empty').hidden = items.length > 0;
+  }
+
+  function setSource(source) {
+    state.source = source;
+    document.querySelectorAll('.tabs [role="tab"]').forEach((tab) => {
+      tab.setAttribute('aria-selected', String(tab.dataset.source === source));
+    });
+    $('#f-query').placeholder = source === 'library' ? 'Filter your library…' : 'Search movies and series…';
+    state.searchResults = [];
+    if (source === 'search' && $('#f-query').value.trim()) search($('#f-query').value.trim());
+    renderResults();
+  }
+
+  document.querySelectorAll('.tabs [role="tab"]').forEach((tab) => {
+    tab.addEventListener('click', () => setSource(tab.dataset.source));
+  });
+
+  function renderResults() {
+    const query = $('#f-query').value.trim().toLowerCase();
+    let results;
+    let hint = '';
+    if (state.source === 'library') {
+      results = query ? state.titles.filter((t) => t.name.toLowerCase().includes(query)) : state.titles;
+      if (!state.titles.length) hint = 'Your Stremio library is empty. Use "Search Stremio" instead.';
+      else if (!results.length) hint = 'No matches in your library.';
+      else if (results.length > RESULTS_SHOWN) hint = 'Showing ' + RESULTS_SHOWN + ' of ' + results.length + '. Type to narrow it down.';
+    } else {
+      results = state.searchResults;
+      if (!query) hint = 'Type a title to search Stremio.';
+      else if (state.searching) hint = 'Searching…';
+      else if (!results.length) hint = 'No results.';
+    }
+    $('#f-results').replaceChildren(...results.slice(0, RESULTS_SHOWN).map((title) => {
+      const added = hasItem(title.id);
+      return h('li', null,
+        thumb(title.poster, 'thumb'),
+        h('div', { class: 'title', title: title.name }, title.name, h('small', null, title.type + (title.year ? ' · ' + title.year : ''))),
+        h('button', { type: 'button', 'aria-pressed': String(added), onclick: () => toggleItem(title) }, added ? '✓ Added' : '+ Add')
+      );
+    }));
+    $('#f-results-hint').textContent = hint;
+    $('#f-results-hint').hidden = !hint;
+  }
+
+  // Search goes straight to Cinemeta, Stremio's official catalog addon.
+  async function search(query) {
+    const seq = ++state.searchSeq;
+    state.searching = true;
+    renderResults();
+    const lists = await Promise.all(['movie', 'series'].map((type) =>
+      fetch('https://v3-cinemeta.strem.io/catalog/' + type + '/top/search=' + encodeURIComponent(query) + '.json')
+        .then((res) => res.json())
+        .then((data) => (Array.isArray(data.metas) ? data.metas : []))
+        .catch(() => [])
+    ));
+    if (seq !== state.searchSeq) return;
+    const merged = [];
+    for (let i = 0; i < Math.max(lists[0].length, lists[1].length); i++) {
+      if (lists[0][i]) merged.push(lists[0][i]);
+      if (lists[1][i]) merged.push(lists[1][i]);
+    }
+    state.searchResults = merged
+      .filter((meta) => meta && meta.id && meta.type && meta.name)
+      .map((meta) => ({ id: meta.id, type: meta.type, name: meta.name, poster: meta.poster, year: meta.releaseInfo }));
+    state.searching = false;
+    renderResults();
+  }
+
+  let searchTimer;
+  $('#f-query').addEventListener('input', () => {
+    if (state.source === 'library') return renderResults();
+    clearTimeout(searchTimer);
+    const query = $('#f-query').value.trim();
+    state.searchSeq++;
+    state.searching = false;
+    state.searchResults = [];
+    if (query) searchTimer = setTimeout(() => search(query), 350);
+    renderResults();
+  });
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const draft = state.draft;
+    draft.name = $('#f-name').value.trim();
+    draft.description = $('#f-description').value.trim();
+    draft.color = S.isColor(form.color.value) ? form.color.value : null;
+    if (!draft.name) return $('#f-name').focus();
+    const item = S.toLibraryItem(draft, { baseUrl: location.origin, previous: state.raw.get(S.ID_PREFIX + draft.id) });
+    busy($('#f-save'), async () => {
+      try {
+        await put([item]);
+      } catch (err) {
+        return toast(err.message, true);
+      }
+      state.raw.set(item._id, item);
+      const saved = S.fromLibraryItem(item);
+      state.folders = S.sortFolders(state.folders.filter((f) => f.id !== saved.id).concat(saved));
+      renderFolders();
+      editor.close();
+      toast(draft.isNew ? 'Folder created' : 'Folder saved');
+    });
+  });
+
+  $('#f-delete').addEventListener('click', (event) => {
+    const draft = state.draft;
+    if (!window.confirm('Delete the folder "' + draft.name + '"? The titles in it stay in your library.')) return;
+    const item = Object.assign({}, state.raw.get(S.ID_PREFIX + draft.id), { removed: true, _mtime: new Date().toISOString() });
+    busy(event.currentTarget, async () => {
+      try {
+        await put([item]);
+      } catch (err) {
+        return toast(err.message, true);
+      }
+      state.raw.set(item._id, item);
+      state.folders = state.folders.filter((f) => f.id !== draft.id);
+      renderFolders();
+      editor.close();
+      toast('Folder deleted');
+    });
+  });
+
+  $('#f-cancel').addEventListener('click', () => editor.close());
+  $('#new-folder').addEventListener('click', () => openEditor(null));
+
+  // Opened from Stremio's "Configure" button: the addon link already identifies the account.
+  const match = location.pathname.match(/^\/([\w-]+)\/configure/);
+  const config = match && S.decodeConfig(match[1]);
+  if (config) {
+    connect(config.k, 'your Stremio account').catch((err) => {
+      showConnectError('Could not open your folders (' + err.message + '). Sign in again, then reinstall the addon.');
+    });
+  }
+})();
+</script>
+</body>
+</html>
