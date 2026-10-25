@@ -3,8 +3,20 @@
 
 const http = require('node:http');
 
+// Like the real API, keep only the fields Stremio's own library items have and drop the rest.
+const ITEM_FIELDS = ['_id', 'name', 'type', 'poster', 'posterShape', 'removed', 'temp', '_ctime', '_mtime', 'state'];
+const HINT_FIELDS = ['defaultVideoId', 'featuredVideoId', 'hasScheduledVideos'];
+
+function pick(object, keys) {
+  return Object.fromEntries(keys.filter((key) => object && key in object).map((key) => [key, object[key]]));
+}
+
+function keepStremioFields(item) {
+  return { ...pick(item, ITEM_FIELDS), behaviorHints: pick(item.behaviorHints, HINT_FIELDS) };
+}
+
 function startFakeApi({ email = 'me@example.com', password = 'secret', authKey = 'test-auth-key', items = [], addons = [] } = {}) {
-  const store = new Map(items.map((item) => [item._id, item]));
+  const library = new Map(items.map((item) => [item._id, keepStremioFields(item)]));
   const collection = { addons };
   const calls = [];
 
@@ -26,13 +38,13 @@ function startFakeApi({ email = 'me@example.com', password = 'secret', authKey =
       }
       if (body.authKey !== authKey) return reply({ error: { message: 'Session does not exist', code: 1 } });
       if (method === 'datastoreMeta') {
-        return reply({ result: [...store.values()].map((item) => [item._id, Date.parse(item._mtime)]) });
+        return reply({ result: [...library.values()].map((item) => [item._id, Date.parse(item._mtime)]) });
       }
       if (method === 'datastoreGet') {
-        return reply({ result: body.all ? [...store.values()] : body.ids.map((id) => store.get(id)).filter(Boolean) });
+        return reply({ result: body.all ? [...library.values()] : body.ids.map((id) => library.get(id)).filter(Boolean) });
       }
       if (method === 'datastorePut') {
-        body.changes.forEach((item) => store.set(item._id, item));
+        body.changes.forEach((item) => library.set(item._id, keepStremioFields(item)));
         return reply({ result: { success: true } });
       }
       if (method === 'addonCollectionGet') return reply({ result: { addons: collection.addons, lastModified: new Date() } });
@@ -46,9 +58,9 @@ function startFakeApi({ email = 'me@example.com', password = 'secret', authKey =
 
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
-      resolve({ url: `http://127.0.0.1:${server.address().port}`, store, collection, calls, close: () => server.close() });
+      resolve({ url: `http://127.0.0.1:${server.address().port}`, library, collection, calls, close: () => server.close() });
     });
   });
 }
 
-module.exports = { startFakeApi };
+module.exports = { startFakeApi, keepStremioFields };

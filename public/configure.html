@@ -298,10 +298,24 @@
     return data.result;
   }
 
+  // Saves library items, then reads them back from Stremio and shows what it actually kept,
+  // so a change that didn't stick is reported instead of looking saved.
   async function put(changes) {
-    const result = await api('datastorePut', { authKey: state.authKey, collection: 'libraryItem', changes });
+    if (changes.length === 0) return;
+    const { authKey } = state;
+    await api('datastorePut', { authKey, collection: 'libraryItem', changes });
+    const ids = changes.map((item) => item._id);
+    const stored = await api('datastoreGet', { authKey, collection: 'libraryItem', ids, all: false });
+    stored.forEach((item) => state.raw.set(item._id, item));
+    state.folders = S.fromLibraryItems(Array.from(state.raw.values()));
+    renderFolders();
     refreshInstalledAddon().catch(() => {});
-    return result;
+    const kept = new Map(stored.map((item) => [item._id, item]));
+    const lost = changes.some((item) => {
+      const saved = kept.get(item._id);
+      return !saved || saved.name !== item.name || saved.type !== item.type || saved.removed !== item.removed;
+    });
+    if (lost) throw new Error("Stremio didn't store this change completely. The list shows what was saved.");
   }
 
   // Stremio keeps its own copy of each installed addon's manifest, and the Board shows one row per
@@ -337,22 +351,16 @@
   // ---- Account ----
 
   async function connect(authKey, account) {
-    const items = await api('datastoreGet', { authKey, collection: 'libraryItem', ids: [], all: true });
+    const items = (await api('datastoreGet', { authKey, collection: 'libraryItem', ids: [], all: true }))
+      .filter((item) => item && typeof item._id === 'string');
+    const ours = (item) => item._id.startsWith(S.ID_PREFIX);
     state.authKey = authKey;
-    state.raw = new Map();
-    const folders = [];
-    const titles = [];
-    for (const item of items) {
-      if (S.isFolderItem(item)) {
-        state.raw.set(item._id, item);
-        const folder = S.fromLibraryItem(item);
-        if (!folder.removed) folders.push(folder);
-      } else if (item && !item.removed && !item.temp && typeof item._id === 'string' && item.type !== 'other') {
-        titles.push({ id: item._id, type: item.type, name: item.name || item._id, poster: item.poster || undefined });
-      }
-    }
-    state.folders = S.sortFolders(folders);
-    state.titles = titles.sort((a, b) => a.name.localeCompare(b.name));
+    state.raw = new Map(items.filter(ours).map((item) => [item._id, item]));
+    state.folders = S.fromLibraryItems(Array.from(state.raw.values()));
+    state.titles = items
+      .filter((item) => !ours(item) && !item.removed && !item.temp && item.type !== 'other')
+      .map((item) => ({ id: item._id, type: item.type, name: item.name || item._id, poster: item.poster || undefined }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     $('#account').textContent = account;
     $('#connect').hidden = true;
     $('#app').hidden = false;
@@ -458,16 +466,11 @@
     if (target < 0 || target >= state.folders.length) return;
     const folders = state.folders.slice();
     [folders[index], folders[target]] = [folders[target], folders[index]];
-    const reordered = folders.map((folder, i) => Object.assign({}, folder, { order: i }));
-    const changes = reordered
-      .filter((folder, i) => folders[i].order !== i)
-      .map((folder) => S.toLibraryItem(folder, { baseUrl: location.origin, previous: state.raw.get(S.ID_PREFIX + folder.id) }));
+    const changes = folders.flatMap((folder, i) =>
+      S.toLibraryItems(Object.assign({}, folder, { order: i }), { baseUrl: location.origin, previous: state.raw }));
     busy(button, async () => {
       try {
         await put(changes);
-        changes.forEach((item) => state.raw.set(item._id, item));
-        state.folders = reordered;
-        renderFolders();
       } catch (err) {
         toast(err.message, true);
       }
@@ -629,17 +632,13 @@
     draft.description = $('#f-description').value.trim();
     draft.color = S.isColor(form.color.value) ? form.color.value : null;
     if (!draft.name) return $('#f-name').focus();
-    const item = S.toLibraryItem(draft, { baseUrl: location.origin, previous: state.raw.get(S.ID_PREFIX + draft.id) });
+    const changes = S.toLibraryItems(draft, { baseUrl: location.origin, previous: state.raw });
     busy($('#f-save'), async () => {
       try {
-        await put([item]);
+        await put(changes);
       } catch (err) {
         return toast(err.message, true);
       }
-      state.raw.set(item._id, item);
-      const saved = S.fromLibraryItem(item);
-      state.folders = S.sortFolders(state.folders.filter((f) => f.id !== saved.id).concat(saved));
-      renderFolders();
       editor.close();
       toast(draft.isNew ? 'Folder created' : 'Folder saved');
     });
@@ -648,16 +647,13 @@
   $('#f-delete').addEventListener('click', (event) => {
     const draft = state.draft;
     if (!window.confirm('Delete the folder "' + draft.name + '"? The titles in it stay in your library.')) return;
-    const item = Object.assign({}, state.raw.get(S.ID_PREFIX + draft.id), { removed: true, _mtime: new Date().toISOString() });
+    const changes = S.deletionItems(draft.id, { previous: state.raw });
     busy(event.currentTarget, async () => {
       try {
-        await put([item]);
+        await put(changes);
       } catch (err) {
         return toast(err.message, true);
       }
-      state.raw.set(item._id, item);
-      state.folders = state.folders.filter((f) => f.id !== draft.id);
-      renderFolders();
       editor.close();
       toast('Folder deleted');
     });

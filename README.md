@@ -86,26 +86,15 @@ Run the tests with `npm test`. The configure-page test runs only when Playwright
 
 ## How it works
 
-Stremio doesn't let addons change its interface, but its library accepts any content type. S-library stores each folder as a library item in your account:
+Stremio doesn't let addons change its interface, but its library accepts any content type. S-library stores folders as items in your own Stremio library. Stremio's servers keep only the fields Stremio itself uses and drop anything extra, so every part of a folder is a plain library item:
 
-```jsonc
-{
-  "_id": "slib:k3x9q2mf",         // "slib:" + folder id
-  "type": "folder",               // gives folders their own type in the Library
-  "name": "Favorites",
-  "poster": "https://<your-host>/img/poster/red.png",
-  "behaviorHints": {
-    "slibrary": {                 // Stremio keeps unknown fields here when it syncs
-      "v": 1,
-      "description": "All-time favorites",
-      "color": "red",
-      "order": 0,
-      "items": [{ "id": "tt0133093", "type": "movie", "name": "The Matrix" }]
-    }
-  }
-  // ...plus the usual library item fields
-}
-```
+| Library item `_id` | What it holds |
+| --- | --- |
+| `slib:<folder id>` | The folder: type `folder` (its own type in the Library), its name, and a colored poster |
+| `slib:<folder id>:info` | `name` holds `{"d": description, "c": color, "o": order}` |
+| `slib:<folder id>:title:<type>:<title id>` | One per title in the folder, with the title's name and poster |
+
+The `info` and `title` items are marked as removed, so Stremio never lists them anywhere. A title taken out of a folder keeps its item, with its type changed to `slibrary-removed`. After every save, the configure page reads the items back from Stremio and reports any change that didn't stick.
 
 The addon then reads those items through the Stremio API and serves:
 

@@ -75,7 +75,7 @@ test('a folder catalog lists its titles, with pagination', () => {
   assert.deepEqual(addon.catalog(folders, 'slib.missing', {}, ctx).metas, []);
 });
 
-test('folder meta has description, links to its titles and echoes the stored data', () => {
+test('folder meta has description and links to its titles', () => {
   const meta = addon.meta(folders, 'slib:fav', ctx);
   assert.equal(meta.name, 'Favorites');
   assert.equal(meta.description, 'The best ones');
@@ -87,13 +87,6 @@ test('folder meta has description, links to its titles and echoes the stored dat
   assert.deepEqual(meta.links[1], { name: 'Edit folders', category: 'S-library', url: ctx.configureUrl });
   assert.deepEqual(meta.links.slice(2).map((l) => l.url), ['stremio:///detail/movie/tt0133093', 'stremio:///detail/series/kitsu%3A1']);
   assert.deepEqual(meta.videos.map((v) => v.id), ['slib:fav:movie:tt0133093', 'slib:fav:series:kitsu:1']);
-  assert.deepEqual(meta.behaviorHints.slibrary, {
-    v: 1,
-    description: 'The best ones',
-    color: 'red',
-    order: 0,
-    items: folders[0].items
-  });
   assert.equal(addon.meta(folders, 'slib:missing', ctx), null);
 });
 

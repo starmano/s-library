@@ -1,13 +1,14 @@
 // Folder model shared by the addon server (Node) and the configure page (browser).
 //
-// A folder is stored as a regular item in the user's Stremio library:
-//   _id            "slib:<folder id>"
-//   type           "folder"  (shows up as its own type filter in Stremio's Library)
-//   name           folder name
-//   poster         colored folder artwork served by this addon
-//   behaviorHints  { slibrary: { description, color, order, items } }
-// Stremio keeps unknown behaviorHints fields when it syncs the library, so the folder
-// contents travel with the user's account and no database is needed.
+// Folders live in the user's own Stremio library as plain library items. Stremio's servers keep
+// only the fields Stremio itself uses and drop anything extra, so each part of a folder is its
+// own item, built from those fields alone:
+//   slib:<id>                           the folder: type "folder", its name and colored poster;
+//                                       listed in Stremio's Library under the "Folder" type
+//   slib:<id>:info                      name holds {"d": description, "c": color, "o": order}
+//   slib:<id>:title:<type>:<title id>   one per title in the folder, with its name and poster
+// The info and title items are marked removed, which keeps them off every Stremio screen.
+// A title taken out of a folder keeps its item, with type "slibrary-removed".
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.SLibrary = factory();
@@ -16,6 +17,8 @@
 
   const ID_PREFIX = 'slib:';
   const TYPE = 'folder';
+  const RECORD_TYPE = 'slibrary';
+  const REMOVED_RECORD_TYPE = 'slibrary-removed';
   const LIMITS = { name: 60, description: 500, items: 1000 };
 
   // Preset colors. Stremio shows catalog names as plain text, so the emoji is what marks
@@ -60,36 +63,67 @@
       .slice(0, LIMITS.items);
   }
 
-  function isFolderItem(item) {
-    return Boolean(item) && typeof item._id === 'string' && item._id.startsWith(ID_PREFIX) && item.type === TYPE;
+  // "slib:<id>", "slib:<id>:info" or "slib:<id>:title:<type>:<title id>" (title ids may contain ":").
+  function parseId(id) {
+    if (typeof id !== 'string' || !id.startsWith(ID_PREFIX)) return null;
+    const [folderId, kind, type, ...rest] = id.slice(ID_PREFIX.length).split(':');
+    if (!folderId) return null;
+    if (kind === undefined) return { folderId, kind: 'folder' };
+    if (kind === 'info' && type === undefined) return { folderId, kind };
+    if (kind === 'title' && type && rest.length > 0) return { folderId, kind, type, titleId: rest.join(':') };
+    return null;
   }
 
-  function fromLibraryItem(item) {
-    if (!isFolderItem(item)) return null;
-    const data = (item.behaviorHints && item.behaviorHints.slibrary) || {};
-    return {
-      id: item._id.slice(ID_PREFIX.length),
-      name: cleanText(item.name, LIMITS.name) || 'Untitled folder',
-      description: cleanText(data.description, LIMITS.description),
-      color: isColor(data.color) ? data.color : null,
-      order: Number.isFinite(data.order) ? data.order : 0,
-      items: cleanItems(data.items),
-      removed: Boolean(item.removed)
-    };
+  function parseInfo(item) {
+    try {
+      const info = JSON.parse(item.name);
+      return info && typeof info === 'object' ? info : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  // Folders saved before the info item existed still have their color in the poster URL.
+  function colorFromPoster(poster) {
+    const match = /\/img\/poster\/([a-z]+)\.png$/.exec(typeof poster === 'string' ? poster : '');
+    return match && isColor(match[1]) ? match[1] : null;
+  }
+
+  function time(value) {
+    return Date.parse(value) || 0;
+  }
+
+  // Reads the folders (not deleted ones) out of a user's library items. Other items are ignored.
+  function fromLibraryItems(libraryItems) {
+    const folders = new Map();
+    const infos = new Map();
+    const titles = new Map();
+    for (const item of libraryItems) {
+      const ref = item && parseId(item._id);
+      if (!ref) continue;
+      if (ref.kind === 'folder' && item.type === TYPE && !item.removed) folders.set(ref.folderId, item);
+      else if (ref.kind === 'info' && item.type === RECORD_TYPE) infos.set(ref.folderId, item);
+      else if (ref.kind === 'title' && item.type === RECORD_TYPE) {
+        if (!titles.has(ref.folderId)) titles.set(ref.folderId, []);
+        titles.get(ref.folderId).push({ id: ref.titleId, type: ref.type, name: item.name, poster: item.poster, added: time(item._ctime) });
+      }
+    }
+    return sortFolders(Array.from(folders, ([id, item]) => {
+      const info = infos.has(id) ? parseInfo(infos.get(id)) : {};
+      const items = (titles.get(id) || []).sort((a, b) => a.added - b.added || String(a.name).localeCompare(b.name));
+      return {
+        id,
+        name: cleanText(item.name, LIMITS.name) || 'Untitled folder',
+        description: cleanText(info.d, LIMITS.description),
+        color: isColor(info.c) ? info.c : colorFromPoster(item.poster),
+        order: Number.isFinite(info.o) ? info.o : 0,
+        items: cleanItems(items)
+      };
+    }));
   }
 
   function sortFolders(folders) {
     return folders.slice().sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
-  }
-
-  function folderData(folder) {
-    return {
-      v: 1,
-      description: cleanText(folder.description, LIMITS.description),
-      color: isColor(folder.color) ? folder.color : null,
-      order: Number.isFinite(folder.order) ? folder.order : 0,
-      items: cleanItems(folder.items)
-    };
   }
 
   function posterUrl(baseUrl, color) {
@@ -100,24 +134,15 @@
     return baseUrl + '/img/bg/' + (isColor(color) ? color : 'none') + '.png';
   }
 
-  // Builds the library item for a folder, in the exact shape Stremio itself writes.
-  // `previous` is the folder's current library item (if any) so watch state and
-  // creation time survive edits.
-  function toLibraryItem(folder, options) {
-    const now = (options.now || new Date()).toISOString();
-    const previous = options.previous || {};
-    const data = folderData(folder);
-    return Object.assign({}, previous, {
-      _id: ID_PREFIX + folder.id,
-      name: cleanText(folder.name, LIMITS.name) || 'Untitled folder',
-      type: TYPE,
-      poster: posterUrl(options.baseUrl, data.color),
+  // A library item in the exact shape Stremio itself writes, keeping whatever `previous` had.
+  function libraryItem(id, fields, previous, now) {
+    return Object.assign({
+      _id: id,
+      poster: null,
       posterShape: 'poster',
-      removed: false,
       temp: false,
-      _ctime: previous._ctime || now,
-      _mtime: now,
-      state: Object.assign({
+      _ctime: now,
+      state: {
         lastWatched: now,
         timeWatched: 0,
         timeOffset: 0,
@@ -128,13 +153,66 @@
         video_id: null,
         watched: null,
         noNotif: true
-      }, previous.state),
-      behaviorHints: Object.assign({
-        defaultVideoId: null,
-        featuredVideoId: null,
-        hasScheduledVideos: false
-      }, previous.behaviorHints, { slibrary: data })
+      },
+      behaviorHints: { defaultVideoId: null, featuredVideoId: null, hasScheduledVideos: false }
+    }, previous, fields, { _mtime: now });
+  }
+
+  function isUnchanged(previous, fields) {
+    return Boolean(previous) && Object.keys(fields).every((key) => previous[key] === fields[key]);
+  }
+
+  // The library items to write so the user's library matches `folder`: only the ones that change.
+  // `options.previous` maps ids to the library items stored so far.
+  function toLibraryItems(folder, options) {
+    const nowMs = (options.now || new Date()).getTime();
+    const now = new Date(nowMs).toISOString();
+    const previous = options.previous;
+    const prefix = ID_PREFIX + folder.id;
+    const color = isColor(folder.color) ? folder.color : null;
+    const changes = [];
+    const write = (id, fields) => {
+      if (!isUnchanged(previous.get(id), fields)) changes.push(libraryItem(id, fields, previous.get(id), now));
+    };
+
+    write(prefix, {
+      name: cleanText(folder.name, LIMITS.name) || 'Untitled folder',
+      type: TYPE,
+      poster: posterUrl(options.baseUrl, color),
+      removed: false
     });
+    write(prefix + ':info', {
+      name: JSON.stringify({
+        d: cleanText(folder.description, LIMITS.description),
+        c: color,
+        o: Number.isFinite(folder.order) ? folder.order : 0
+      }),
+      type: RECORD_TYPE,
+      removed: true
+    });
+    const kept = new Set();
+    cleanItems(folder.items).forEach((item, index) => {
+      const id = `${prefix}:title:${item.type}:${item.id}`;
+      const before = previous.get(id);
+      const fields = { name: item.name, type: RECORD_TYPE, poster: item.poster || null, removed: true };
+      // Newly added titles go to the end, in the order they were added.
+      if (!before || before.type !== RECORD_TYPE) fields._ctime = new Date(nowMs + index).toISOString();
+      kept.add(id);
+      write(id, fields);
+    });
+    previous.forEach((item, id) => {
+      if (id.startsWith(prefix + ':title:') && item.type === RECORD_TYPE && !kept.has(id)) {
+        write(id, { type: REMOVED_RECORD_TYPE });
+      }
+    });
+    return changes;
+  }
+
+  // Deleting a folder removes it from the library; its other items are then ignored.
+  function deletionItems(folderId, options) {
+    const id = ID_PREFIX + folderId;
+    const now = (options.now || new Date()).toISOString();
+    return [libraryItem(id, { removed: true }, options.previous.get(id), now)];
   }
 
   // The addon URL carries a small base64url JSON config: { k: <Stremio auth key> }.
@@ -161,13 +239,12 @@
     isColor,
     colorOf,
     cleanItems,
-    folderData,
-    isFolderItem,
-    fromLibraryItem,
+    fromLibraryItems,
     sortFolders,
     posterUrl,
     backgroundUrl,
-    toLibraryItem,
+    toLibraryItems,
+    deletionItems,
     encodeConfig,
     decodeConfig
   };

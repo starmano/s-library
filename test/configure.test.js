@@ -41,7 +41,8 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   await page.route('https://v3-cinemeta.strem.io/**', (route) => route.fulfill({
     json: { metas: route.request().url().includes('/movie/') ? [{ id: 'tt1375666', type: 'movie', name: 'Inception', releaseInfo: '2010' }] : [] }
   }));
-  const folderItems = () => [...api.store.values()].filter((item) => item._id.startsWith('slib:'));
+  // What Stremio's servers hold (the fake API drops non-standard fields, like the real one).
+  const stored = () => S.fromLibraryItems([...api.library.values()]);
 
   await page.goto(`${base}/configure`);
   await page.fill('input[name=email]', 'me@example.com');
@@ -72,22 +73,26 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   await page.click('#f-save');
   await page.waitForFunction(() => document.querySelectorAll('.folder').length === 2);
 
-  let folders = S.sortFolders(folderItems().map(S.fromLibraryItem));
+  let folders = stored();
   assert.deepEqual(folders.map((f) => [f.name, f.color, f.items.map((i) => i.id)]), [
     ['Favorites', 'red', ['tt0133093', 'tt1375666']],
     ['Watch later', null, ['tt0903747']]
   ]);
   assert.equal(folders[0].description, 'All-time favorites');
 
-  // Reorder, then rename through the editor.
+  // Reorder, then rename and take a title out through the editor.
   await page.click('button[aria-label="Move Watch later up"]');
   await page.waitForFunction(() => document.querySelector('.folder-name').textContent === 'Watch later');
   await page.click('.folder >> nth=1 >> text=Edit');
   await page.fill('#f-name', 'Best of all time');
+  await page.click('button[aria-label="Remove The Matrix"]');
   await page.click('#f-save');
   await page.waitForSelector('.folder-name:has-text("Best of all time")');
-  folders = S.sortFolders(folderItems().map(S.fromLibraryItem));
-  assert.deepEqual(folders.map((f) => f.name), ['Watch later', 'Best of all time']);
+  folders = stored();
+  assert.deepEqual(folders.map((f) => [f.name, f.items.map((i) => i.id)]), [
+    ['Watch later', ['tt0903747']],
+    ['Best of all time', ['tt1375666']]
+  ]);
 
   // The installed copy of the manifest picks up the folder rows (refreshed in the background);
   // other addons are untouched.
@@ -98,13 +103,15 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   assert.equal(rows(), '📁 S-library | 📁 Watch later | 🔴 Best of all time');
   assert.deepEqual(api.collection.addons[0], cinemeta);
 
-  // Reopening from Stremio's "Configure" button signs in from the addon link; then delete.
+  // Reopening from Stremio's "Configure" button signs in from the addon link and shows
+  // the folders as stored, titles included; then delete one.
   await page.goto(`${base}/${config}/configure`);
   await page.waitForSelector('#app:not([hidden])');
+  assert.deepEqual(await page.locator('.folder-meta').allTextContents(), ['1 title', '1 title']);
   page.once('dialog', (dialog) => dialog.accept());
   await page.click('.folder >> nth=0 >> text=Edit');
   await page.click('#f-delete');
   await page.waitForFunction(() => document.querySelectorAll('.folder').length === 1);
-  assert.equal(folderItems().find((item) => item.name === 'Watch later').removed, true);
+  assert.deepEqual(stored().map((f) => f.name), ['Best of all time']);
   assert.deepEqual(errors, []);
 });

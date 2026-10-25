@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
 const { startFakeApi } = require('./fake-stremio-api');
 const S = require('../src/shared');
 
-const folderItem = S.toLibraryItem(
+const none = new Map();
+const favorites = S.toLibraryItems(
   {
     id: 'fav',
     name: 'Favorites',
@@ -14,9 +15,10 @@ const folderItem = S.toLibraryItem(
     order: 0,
     items: [{ id: 'tt0133093', type: 'movie', name: 'The Matrix' }]
   },
-  { baseUrl: 'https://old.host', now: new Date('2026-01-01T00:00:00Z') }
+  { baseUrl: 'https://old.host', previous: none, now: new Date('2026-01-01T00:00:00Z') }
 );
-const removedItem = { ...S.toLibraryItem({ id: 'gone', name: 'Gone', items: [] }, { baseUrl: 'https://old.host' }), removed: true };
+const gone = S.toLibraryItems({ id: 'gone', name: 'Gone', items: [] }, { baseUrl: 'https://old.host', previous: none });
+const deleted = S.deletionItems('gone', { previous: new Map(gone.map((item) => [item._id, item])) });
 const movieItem = { _id: 'tt0111161', name: 'The Shawshank Redemption', type: 'movie', removed: false, temp: false, _mtime: '2026-01-01T00:00:00Z' };
 
 let api;
@@ -25,7 +27,7 @@ let server;
 let config;
 
 test.before(async () => {
-  api = await startFakeApi({ items: [folderItem, removedItem, movieItem] });
+  api = await startFakeApi({ items: [...favorites, ...deleted, movieItem] });
   process.env.STREMIO_API_URL = api.url;
   const { createServer } = require('../src/server');
   server = createServer();
@@ -129,8 +131,8 @@ test('proxies sign-in and library calls to the Stremio API', async () => {
 test('saving a folder through the proxy shows up in the addon right away', async () => {
   // Warm the cache, then save a second folder the way the configure page does.
   await get(`/${config}/manifest.json`);
-  const created = S.toLibraryItem({ id: 'later', name: 'Watch later', color: 'green', order: 1, items: [] }, { baseUrl: base });
-  const put = await post('/api/datastorePut', { authKey: 'test-auth-key', collection: 'libraryItem', changes: [created] });
+  const changes = S.toLibraryItems({ id: 'later', name: 'Watch later', color: 'green', order: 1, items: [] }, { baseUrl: base, previous: none });
+  const put = await post('/api/datastorePut', { authKey: 'test-auth-key', collection: 'libraryItem', changes });
   assert.deepEqual(put.body.result, { success: true });
   const { body } = await get(`/${config}/manifest.json`);
   assert.deepEqual(body.catalogs.map((c) => c.name), ['📁 S-library', '🔵 Favorites', '🟢 Watch later']);

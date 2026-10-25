@@ -1,7 +1,7 @@
 // Stremio addon protocol responses (manifest, catalog, meta, stream), built from a user's folders.
 'use strict';
 
-const { ID_PREFIX, TYPE, colorOf, folderData, posterUrl, backgroundUrl } = require('./shared');
+const { ID_PREFIX, TYPE, colorOf, posterUrl, backgroundUrl } = require('./shared');
 const { version } = require('../package.json');
 
 const PAGE_SIZE = 100;
@@ -103,10 +103,7 @@ function meta(folders, id, ctx) {
       ...folder.items.map((item) => ({ name: item.name, category: 'In this folder', url: detailLink(item.type, item.id) }))
     ],
     // The folder's contents, listed where Stremio normally shows episodes.
-    videos: folder.items.map((item) => ({ id: videoId(folder, item), title: item.name, thumbnail: itemThumbnail(item) })),
-    // Echo the stored folder data: Stremio rebuilds the library item from this meta
-    // when the folder page is used (e.g. "mark as watched"), so nothing may get lost.
-    behaviorHints: { defaultVideoId: null, featuredVideoId: null, hasScheduledVideos: false, slibrary: folderData(folder) }
+    videos: folder.items.map((item) => ({ id: videoId(folder, item), title: item.name, thumbnail: itemThumbnail(item) }))
   };
 }
 

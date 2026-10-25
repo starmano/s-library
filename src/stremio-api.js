@@ -1,7 +1,7 @@
 // Minimal client for the Stremio account API (the same API the Stremio apps use).
 'use strict';
 
-const { ID_PREFIX, fromLibraryItem, sortFolders } = require('./shared');
+const { ID_PREFIX, fromLibraryItems } = require('./shared');
 
 const API_URL = (process.env.STREMIO_API_URL || 'https://api.strem.io').replace(/\/+$/, '') + '/api/';
 const CACHE_TTL = 15 * 1000;
@@ -31,7 +31,7 @@ async function loadFolders(authKey) {
   const ids = modified.map((entry) => entry[0]).filter((id) => typeof id === 'string' && id.startsWith(ID_PREFIX));
   if (ids.length === 0) return [];
   const items = await call('datastoreGet', { authKey, collection: 'libraryItem', ids, all: false });
-  return sortFolders(items.map(fromLibraryItem).filter((folder) => folder && !folder.removed));
+  return fromLibraryItems(items);
 }
 
 // Stremio asks for the manifest and every folder catalog at once, so folders are cached briefly.
