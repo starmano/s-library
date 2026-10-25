@@ -68,6 +68,20 @@ Many cPanel hosts can run Node.js apps under **Software → Setup Node.js App**.
 
 To update, upload and extract the new files over the old ones, then click **Restart** in **Setup Node.js App**.
 
+#### Updating automatically from GitHub
+
+Instead of uploading files, let cPanel pull them from GitHub:
+
+1. In **Files → Git™ Version Control**, click **Create**, keep **Clone a Repository** on and set **Clone URL** to the repository and **Repository Path** to `s-library-app`. The folder must be empty or not exist yet. A private repository needs an SSH clone URL (`git@github.com:…`) and an SSH key that GitHub accepts, for example a read-only deploy key.
+2. Point **Setup Node.js App** at that folder as in step 4 above.
+3. Under **Advanced → Cron Jobs**, add a job that runs every 15 minutes (`*/15 * * * *`) with this command. It pulls new commits and restarts the app only when something changed:
+
+   ```sh
+   cd ~/s-library-app && OLD=$(git rev-parse HEAD) && git pull -q --ff-only && [ "$(git rev-parse HEAD)" != "$OLD" ] && { mkdir -p tmp; touch tmp/restart.txt; cloudlinux-selector restart --json --interpreter nodejs --app-root s-library-app >/dev/null 2>&1; }
+   ```
+
+   `tmp/restart.txt` is how Passenger and LiteSpeed restart an app; `cloudlinux-selector` does the same on CloudLinux servers. Whichever your server doesn't use is ignored.
+
 Run the tests with `npm test`. The configure-page test runs only when Playwright is installed and is skipped otherwise.
 
 ## How it works
