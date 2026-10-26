@@ -221,8 +221,8 @@ function actionPage(res, status, { image, heading, text, links }) {
   res.end(html);
 }
 
-// "/<config>/act/add|remove/<folder>/<type>/<title>": the folder entries in a title's stream list,
-// for Stremio Web, which opens them in a new tab.
+// "/<config>/act/add|remove-ask|remove/<folder>/<type>/<title>": the folder entries in a title's
+// stream list, for Stremio Web, which opens them in a new tab. Taking a title out asks first.
 async function actionRoute(req, res, [, configSegment, verb, folderId, rawType, rawId]) {
   const config = decodeConfig(configSegment);
   const ctx = context(req, configSegment);
@@ -240,6 +240,15 @@ async function actionRoute(req, res, [, configSegment, verb, folderId, rawType, 
     const outcome = await runAction(config.k, { verb, folderId, version: 0, arg: `${type}:${id}` }, ctx);
     const folder = outcome.library.folders.find((f) => f.id === folderId);
     if (!folder) throw new Error(outcome.message);
+    const link = (to) => `${ctx.actionUrl}/${to}/${folder.id}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
+    if (outcome.page === 'confirm-remove') {
+      return actionPage(res, 200, {
+        image: folderPoster(ctx.baseUrl, folder),
+        heading: `Remove "${outcome.title.name}" from "${folder.name}"?`,
+        text: 'The title itself stays in Stremio, and you can add it to the folder again any time.',
+        links: [['Yes, remove it', link('remove'), true], ['No, keep it', back]]
+      });
+    }
     actionPage(res, 200, {
       image: folderPoster(ctx.baseUrl, folder),
       heading: outcome.message,
@@ -247,7 +256,7 @@ async function actionRoute(req, res, [, configSegment, verb, folderId, rawType, 
       links: [
         ['Back to Stremio', back, true],
         ['Open the folder', `stremio:///detail/${TYPE}/${encodeURIComponent(ID_PREFIX + folder.id)}`],
-        ['Undo', `${ctx.actionUrl}/${verb === 'add' ? 'remove' : 'add'}/${folder.id}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`]
+        ...(outcome.undo ? [['Undo', link(outcome.undo)]] : [])
       ]
     });
   } catch (err) {
@@ -284,7 +293,7 @@ const ROUTES = [
   ['GET', /^\/img\/(poster|bg)\/([a-z]+)\.png$/, imageRoute],
   ['GET', /^\/(?:([\w-]+)\/)?manifest\.json$/, manifestRoute],
   ['GET', /^\/([\w-]+)\/(catalog|meta|stream)\/([^/]+)\/([^/]+?)(?:\/([^/]+))?\.json$/, resourceRoute],
-  ['GET', /^\/([\w-]+)\/act\/(add|remove)\/([a-z0-9]+)\/([^/]+)\/([^/]+)$/, actionRoute],
+  ['GET', /^\/([\w-]+)\/act\/(add|remove-ask|remove)\/([a-z0-9]+)\/([^/]+)\/([^/]+)$/, actionRoute],
   ['POST', /^\/api\/(\w+)$/, proxyRoute]
 ];
 

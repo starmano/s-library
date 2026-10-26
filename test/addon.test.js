@@ -125,20 +125,20 @@ test('folder meta has description and links to its titles', () => {
 
 test("a title's stream list offers every folder, and a new one", () => {
   assert.deepEqual(addon.stream(folders, 'movie', 'tt0133093', ctx).streams, [
-    { name: '🔴 Favorites', description: '✓ In this folder · tap to take it out', externalUrl: 'https://addon.test/cfg/act/remove/fav/movie/tt0133093' },
-    { name: '📁 Watch later', description: '＋ Add to this folder', externalUrl: 'https://addon.test/cfg/act/add/later/movie/tt0133093' },
-    { name: '📁 S-library', description: '＋ New folder with this title', externalUrl: 'https://addon.test/cfg/configure#new=movie%3Att0133093' }
+    { name: '🔴 Favorites', description: '✓ Already in this folder\n✕ Tap to remove it (asks first)', externalUrl: 'https://addon.test/cfg/act/remove-ask/fav/movie/tt0133093' },
+    { name: '📁 Watch later', description: '＋ Tap to add it to this folder', externalUrl: 'https://addon.test/cfg/act/add/later/movie/tt0133093' },
+    { name: '📁 New folder', description: '＋ Tap to create a new folder with this title in it', externalUrl: 'https://addon.test/cfg/configure#new=movie%3Att0133093' }
   ]);
   // Episodes act on their show.
   const episode = addon.stream(folders, 'series', 'kitsu:1:5', ctx).streams;
-  assert.equal(episode[0].externalUrl, 'https://addon.test/cfg/act/remove/fav/series/kitsu%3A1');
+  assert.equal(episode[0].externalUrl, 'https://addon.test/cfg/act/remove-ask/fav/series/kitsu%3A1');
   assert.equal(addon.stream([], 'series', 'tt0944947:1:1', ctx).streams[0].externalUrl, 'https://addon.test/cfg/configure#new=series%3Att0944947');
 });
 
 test('a title in a folder can be opened or taken out from the folder page', () => {
   assert.deepEqual(addon.stream(folders, 'folder', 'slib:fav:series:kitsu:1', ctx).streams, [
-    { name: '📁 S-library', description: 'Open "Cowboy Bebop"', externalUrl: 'stremio:///detail/series/kitsu%3A1' },
-    { name: '📁 S-library', description: '✕ Take it out of "Favorites"', externalUrl: 'https://addon.test/cfg/act/remove/fav/series/kitsu%3A1' }
+    { name: '🎬 Open title', description: 'Go to "Cowboy Bebop" to watch it', externalUrl: 'stremio:///detail/series/kitsu%3A1' },
+    { name: '🗑️ Remove from folder', description: 'Take "Cowboy Bebop" out of "Favorites"\nYou\'ll be asked to confirm', externalUrl: 'https://addon.test/cfg/act/remove-ask/fav/series/kitsu%3A1' }
   ]);
   // An empty folder's page explains how to fill it.
   assert.match(addon.stream(folders, 'folder', 'slib:later', ctx).streams[0].description, /folder is empty/);

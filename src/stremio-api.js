@@ -1,7 +1,7 @@
 // Minimal client for the Stremio account API (the same API the Stremio apps use).
 'use strict';
 
-const { ID_PREFIX, fromLibraryItems, readSettings } = require('./shared');
+const { ID_PREFIX, fromLibraryItems, readSettings, migrationItems } = require('./shared');
 
 const API_URL = (process.env.STREMIO_API_URL || 'https://api.strem.io').replace(/\/+$/, '') + '/api/';
 // Stremio's official catalog addon, for the names and posters of movies and series.
@@ -36,6 +36,29 @@ async function loadItems(authKey) {
   return call('datastoreGet', { authKey, collection: 'libraryItem', ids, all: false });
 }
 
+// Writes `changes`, reads them back to make sure Stremio stored them, and records what it
+// stored in `previous` (items by id).
+async function save(authKey, changes, previous) {
+  await call('datastorePut', { authKey, collection: 'libraryItem', changes });
+  const stored = await call('datastoreGet', { authKey, collection: 'libraryItem', ids: changes.map((item) => item._id), all: false });
+  const kept = new Map(stored.map((item) => [item._id, item]));
+  const lost = changes.some((item) => {
+    const saved = kept.get(item._id);
+    return !saved || saved.name !== item.name || saved.type !== item.type || saved.removed !== item.removed;
+  });
+  stored.forEach((item) => previous.set(item._id, item));
+  if (lost) throw new Error("Stremio didn't store this change.");
+}
+
+// The items by id, brought up to date first (see migrationItems in shared.js). If that fails,
+// they are read as they are.
+async function loadCurrent(authKey) {
+  const previous = new Map((await loadItems(authKey)).map((item) => [item._id, item]));
+  const migration = migrationItems(previous);
+  if (migration.length > 0) await save(authKey, migration, previous).catch(() => {});
+  return previous;
+}
+
 function readLibrary(items) {
   return { folders: fromLibraryItems(items), settings: readSettings(items) };
 }
@@ -45,7 +68,7 @@ function readLibrary(items) {
 function getLibrary(authKey) {
   const hit = cache.get(authKey);
   if (hit && Date.now() - hit.at < CACHE_TTL) return hit.promise;
-  const entry = { at: Date.now(), promise: loadItems(authKey).then(readLibrary) };
+  const entry = { at: Date.now(), promise: loadCurrent(authKey).then((previous) => readLibrary([...previous.values()])) };
   // Failures are not cached.
   entry.promise.catch(() => {
     if (cache.get(authKey) === entry) cache.delete(authKey);
@@ -61,23 +84,15 @@ function forgetFolders(authKey) {
 }
 
 // Changes S-library's items: `edit` gets the current folders, settings and items (`previous`,
-// by id) and returns { changes, ...result }. The changes are written, read back to make sure
-// Stremio stored them, and the result is returned with the folders and settings after the change.
+// by id) and returns { changes, ...result }. The changes are written and checked (see save),
+// and the result is returned with the folders and settings after the change.
 async function editLibrary(authKey, edit) {
-  const items = await loadItems(authKey);
-  const previous = new Map(items.map((item) => [item._id, item]));
-  const { changes = [], ...result } = await edit({ ...readLibrary(items), previous });
+  const previous = await loadCurrent(authKey);
+  const { changes = [], ...result } = await edit({ ...readLibrary([...previous.values()]), previous });
   if (changes.length > 0) {
-    await call('datastorePut', { authKey, collection: 'libraryItem', changes });
     forgetFolders(authKey);
-    const stored = await call('datastoreGet', { authKey, collection: 'libraryItem', ids: changes.map((item) => item._id), all: false });
-    const kept = new Map(stored.map((item) => [item._id, item]));
-    const lost = changes.some((item) => {
-      const saved = kept.get(item._id);
-      return !saved || saved.name !== item.name || saved.type !== item.type || saved.removed !== item.removed;
-    });
-    if (lost) throw new Error("Stremio didn't store this change.");
-    stored.forEach((item) => previous.set(item._id, item));
+    await save(authKey, changes, previous);
+    forgetFolders(authKey);
   }
   return { ...result, library: readLibrary([...previous.values()]) };
 }

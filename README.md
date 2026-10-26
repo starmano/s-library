@@ -33,12 +33,12 @@ Icons: 96 to choose from (genres, moods, seasons, sports and more), or none. Eac
 
 Stremio doesn't let addons add buttons, so S-library works through what Stremio already shows: links on a folder's page, cards in search results and entries in a title's list of streams. Opening one makes the change and shows the folder (or S-library's own page) with a ✓ message at the top.
 
-- **Add a title to a folder:** open a movie or show. Its list of streams shows your folders: tap one to add the title, or tap a folder marked "✓ In this folder" to take it out. **New folder with this title** creates a folder with it.
+- **Add a title to a folder:** open a movie or show. Its list of streams shows your folders: tap one to add the title, or tap a folder marked "✓ Already in this folder" to take it out (S-library asks first). **📁 New folder** creates a folder with the title in it.
 - **Create a folder:** search for `new folder: Road trip` and open the **＋ New folder "Road trip"** card. Any search also offers a new folder with what you typed. The **New folder** link on a folder's page fills in the search for you.
 - **Rename or describe a folder:** tap **Rename** or **Description** on its page. This opens the search with `rename Favorites: ` (or `describe Favorites: `) typed in: type the new name or description after the colon and open the card.
 - **Color, icon, order:** tap a color or icon on the folder's page (the current one has a ✓), or **Move up** / **Move down**.
 - **Delete a folder:** tap **Delete** on its page and confirm. The titles in it are not touched.
-- **Take a title out of a folder:** on the folder's page, pick the title and choose **Take it out**.
+- **Take a title out of a folder:** on the folder's page, pick the title and choose **🗑️ Remove from folder**, then **Yes, remove it**. The page that follows has **Undo**. **🎬 Open title** goes to the title instead.
 - **Show or hide folders in the Library:** tap **Hide folders from my Library** on any folder's page, or use the switch on the configure page. Hidden folders stay on the Board, in Discover under the type **Folder**, and in search (unless those are switched off too).
 
 Edit links are made for the folder as it was when its page opened. Stremio loads a page again when you go back to it; if the folder has changed since, the old link changes nothing and says so, so going back never undoes a newer change.
@@ -49,7 +49,7 @@ Changes to the folder rows on the Board reach Stremio the next time you open it 
 
 The version the server runs is shown next to the title on the configure page, with a short note on what changed. The notes open by themselves the first time you see a new version.
 
-While folders show in the Library, removing a folder from the library with Stremio's own button deletes the folder. The titles in it are not touched.
+Stremio's own **Remove from library** button on a folder's page only takes that folder out of the Library: the folder and its titles stay, on the Board, in Discover and in search, and **Add to library** on its page puts it back. Only **Delete** deletes a folder, and it asks first. (Up to version 1.5, Stremio's button deleted the folder; folders deleted that way stay deleted.)
 
 ## Running it
 
@@ -131,8 +131,8 @@ The addon then reads those items through the Stremio API and serves:
 - **catalog** `slib.search`: S-library's search results (folders, and cards that create, rename or describe one). With folders switched off in search, it only answers the `new folder:`, `rename` and `describe` searches,
 - **meta** for `slib:` ids: the folder page, with links to its titles and to edit it,
 - **meta** for `slib:do:<action>:<folder id>:<version>[:<argument>]` ids: the page an edit link or card opens. Asking for it makes the change through the Stremio API (`src/actions.js`) and returns the folder page with the outcome. Changes to the folder itself only apply when `<version>` matches the folder's current version.
-- **stream** for every movie and show: one entry per folder, to add the title or take it out, plus **New folder with this title**. In the Stremio apps each entry opens an `slib:do:` page. Stremio Web sends an `Origin` header and opens entries in a new tab, so it gets `/<config>/act/add|remove/<folder>/<type>/<id>` instead, which makes the change and shows a confirmation page. A title's name and poster come from your library, or from Cinemeta.
-- **stream** for a folder's title list: open the title, or take it out of the folder.
+- **stream** for every movie and show: one entry per folder, to add the title or take it out, plus **New folder with this title**. In the Stremio apps each entry opens an `slib:do:` page. Stremio Web sends an `Origin` header and opens entries in a new tab, so it gets `/<config>/act/add|remove-ask|remove/<folder>/<type>/<id>` instead, which makes the change (or, for `remove-ask`, asks first) and shows a confirmation page. A title's name and poster come from your library, or from Cinemeta.
+- **stream** for a folder's title list: open the title, or take it out of the folder (after a confirmation page).
 
 Folder posters (with the folder's name and icon), backgrounds and the logo are PNGs drawn by the addon itself and cached in memory. Names are written in Plus Jakarta Sans, the font Stremio's own interface uses, which is bundled in `fonts/` under the SIL Open Font License (`fonts/OFL.txt`). Icons are a selection of [Phosphor Icons](https://phosphoricons.com) (fill style, MIT license, `icons/LICENSE`).
 

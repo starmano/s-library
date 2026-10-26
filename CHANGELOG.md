@@ -2,6 +2,12 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.6.0 — 2026-10-26
+
+- Taking a title out of a folder in Stremio now asks first, and the page after it has an Undo link.
+- Clearer entries in the list of streams: "🎬 Open title", "🗑️ Remove from folder", "＋ Tap to add it to this folder" and "📁 New folder".
+- Stremio's own "Remove from library" button no longer deletes a folder: it only takes the folder out of the Library, and "Add to library" puts it back. Deleting is done with Delete, which asks first.
+
 ## 1.5.1 — 2026-10-26
 
 - Rows for the newer colors are marked with plain colored shapes instead of pictures: 🟥 wine, 💗 pink, 🟧 peach, 🟨 gold, 🟩 lime, 💚 mint, 🔷 sky and 🟦 navy.

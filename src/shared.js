@@ -10,10 +10,12 @@
 //                                       "t": version (time of the last edit)}
 //   slib:<id>:title:<type>:<title id>   one per title in the folder, with its name and poster
 //   slib::settings                      name holds {"library", "discover", "search": where in
-//                                       Stremio folders show, "t": version}
+//                                       Stremio folders show, "t": version, "k": 1 (see
+//                                       migrationItems)}
 // The info, title and settings items are marked removed, which keeps them off every Stremio
-// screen. Folders are hidden from the Library the same way. A deleted folder, or a title taken
-// out of a folder, keeps its item, with type "slibrary-removed".
+// screen. A folder is hidden from the Library the same way, by the Library switch or by
+// Stremio's own "Remove from library" button. A deleted folder, or a title taken out of a
+// folder, keeps its item, with type "slibrary-removed".
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.SLibrary = factory();
@@ -129,26 +131,26 @@
         const stored = parseInfo(item);
         const settings = {};
         SETTINGS.forEach((key) => { settings[key] = stored[key] !== false; });
-        return Object.assign(settings, { version: Number.isFinite(stored.t) ? stored.t : 0, stored: true });
+        return Object.assign(settings, { version: Number.isFinite(stored.t) ? stored.t : 0, keep: stored.k === 1, stored: true });
       }
     }
-    return { library: true, discover: true, search: true, version: 0, stored: false };
+    return { library: true, discover: true, search: true, version: 0, keep: false, stored: false };
   }
 
   // Reads the folders (not deleted ones) out of a user's library items. Other items are ignored.
   function fromLibraryItems(libraryItems) {
     const items = Array.from(libraryItems);
-    // While folders show in the Library, a folder removed from it was deleted (that's what
-    // Stremio's own "Remove from library" button does to it). While they're hidden, every
-    // folder is removed from the Library, and only the deleted ones have another type.
-    const { library } = readSettings(items);
+    // A folder removed from the Library is still a folder; deleted ones have another type.
+    // Before migrationItems has run, a folder removed from the Library while folders were shown
+    // there was deleted: that's what Stremio's own "Remove from library" button used to mean.
+    const { library, keep } = readSettings(items);
     const folders = new Map();
     const infos = new Map();
     const titles = new Map();
     for (const item of items) {
       const ref = item && parseId(item._id);
       if (!ref) continue;
-      if (ref.kind === 'folder' && item.type === TYPE && (!library || !item.removed)) folders.set(ref.folderId, item);
+      if (ref.kind === 'folder' && item.type === TYPE && (keep || !library || !item.removed)) folders.set(ref.folderId, item);
       else if (ref.kind === 'info' && item.type === RECORD_TYPE) infos.set(ref.folderId, item);
       else if (ref.kind === 'title' && item.type === RECORD_TYPE) {
         if (!titles.has(ref.folderId)) titles.set(ref.folderId, []);
@@ -236,9 +238,11 @@
 
     const name = cleanText(folder.name, LIMITS.name) || 'Untitled folder';
     const icon = cleanIcon(folder.icon);
-    const { library } = readSettings(previous.values());
+    // A folder stays in or out of the Library as it was; a new one follows the Library switch.
+    const before = previous.get(prefix);
+    const removed = before && before.type === TYPE ? Boolean(before.removed) : !readSettings(previous.values()).library;
     const poster = folderPoster(options.baseUrl, { color, name, icon, showName: folder.showName });
-    write(prefix, { name, type: TYPE, poster, removed: !library });
+    write(prefix, { name, type: TYPE, poster, removed });
     const info = {
       d: cleanText(folder.description, LIMITS.description),
       c: color,
@@ -278,7 +282,7 @@
   }
 
   // The library items to write to change where folders show: `update` holds the settings that
-  // change, e.g. { library: false }.
+  // change, e.g. { library: false }. Switching the Library on or off shows or hides every folder.
   function settingsItems(update, options) {
     const nowMs = (options.now || new Date()).getTime();
     const now = new Date(nowMs).toISOString();
@@ -286,24 +290,27 @@
     const current = readSettings(previous.values());
     const next = {};
     SETTINGS.forEach((key) => { next[key] = typeof update[key] === 'boolean' ? update[key] : current[key]; });
-    if (current.stored && SETTINGS.every((key) => next[key] === current[key])) return [];
+    if (current.keep && SETTINGS.every((key) => next[key] === current[key])) return [];
     const changes = [];
-    if (current.library !== next.library) {
-      previous.forEach((item, id) => {
-        const ref = parseId(id);
-        if (!ref || ref.kind !== 'folder' || item.type !== TYPE) return;
-        // Folders removed from the Library while they were shown there were deleted: mark them
-        // so, before every folder gets removed from the Library to hide it.
-        if (current.library && item.removed) changes.push(libraryItem(id, { type: REMOVED_RECORD_TYPE }, item, now));
-        else if (item.removed === next.library) changes.push(libraryItem(id, { removed: !next.library }, item, now));
-      });
-    }
+    previous.forEach((item, id) => {
+      const ref = parseId(id);
+      if (!ref || ref.kind !== 'folder' || item.type !== TYPE) return;
+      if (!current.keep && current.library && item.removed) changes.push(libraryItem(id, { type: REMOVED_RECORD_TYPE }, item, now));
+      else if (current.library !== next.library && item.removed === next.library) changes.push(libraryItem(id, { removed: !next.library }, item, now));
+    });
     changes.push(libraryItem(SETTINGS_ID, {
-      name: JSON.stringify(Object.assign(next, { t: nowMs })),
+      name: JSON.stringify(Object.assign(next, { t: nowMs, k: 1 })),
       type: RECORD_TYPE,
       removed: true
     }, previous.get(SETTINGS_ID), now));
     return changes;
+  }
+
+  // Up to version 1.5, Stremio's own "Remove from library" button deleted a folder, with no
+  // way back. Now it only takes the folder out of the Library. This runs once per account: it
+  // marks the folders removed that way as deleted, as they were, and records that it's done.
+  function migrationItems(previous, options) {
+    return readSettings(previous.values()).keep ? [] : settingsItems({}, Object.assign({}, options, { previous }));
   }
 
   // The addon URL carries a small base64url JSON config: { k: <Stremio auth key> }.
@@ -342,6 +349,7 @@
     toLibraryItems,
     deletionItems,
     settingsItems,
+    migrationItems,
     encodeConfig,
     decodeConfig
   };

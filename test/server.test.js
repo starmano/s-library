@@ -19,6 +19,8 @@ const favorites = S.toLibraryItems(
 );
 const gone = S.toLibraryItems({ id: 'gone', name: 'Gone', items: [] }, { baseUrl: 'https://old.host', previous: none });
 const deleted = S.deletionItems('gone', { previous: new Map(gone.map((item) => [item._id, item])) });
+// A folder deleted with Stremio's own "Remove from library" button, back when that deleted it.
+const removedByStremio = { ...S.toLibraryItems({ id: 'old', name: 'Old', items: [] }, { baseUrl: 'https://old.host', previous: none })[0], removed: true };
 const movieItem = { _id: 'tt0111161', name: 'The Shawshank Redemption', type: 'movie', removed: false, temp: false, _mtime: '2026-01-01T00:00:00Z' };
 
 let api;
@@ -28,7 +30,7 @@ let config;
 
 test.before(async () => {
   api = await startFakeApi({
-    items: [...favorites, ...deleted, movieItem],
+    items: [...favorites, ...deleted, removedByStremio, movieItem],
     cinemeta: { tt1375666: { id: 'tt1375666', type: 'movie', name: 'Inception', poster: 'https://example.com/inception.jpg' } }
   });
   process.env.STREMIO_API_URL = api.url;
@@ -93,6 +95,9 @@ test('configured manifest lists the folders from the Stremio library', async () 
   const { body } = await get(`/${config}/manifest.json`);
   assert.equal(body.behaviorHints.configurationRequired, false);
   assert.deepEqual(body.catalogs.map((c) => c.name), ['📁 S-library', '🔵 Favorites', 'S-library']);
+  // The first read brings the account up to date: the folder deleted the old way stays deleted.
+  assert.equal(api.library.get('slib:old').type, 'slibrary-removed');
+  assert.equal(S.readSettings(api.library.values()).keep, true);
 });
 
 test('catalog, meta and stream routes use the current host', async () => {
@@ -163,7 +168,7 @@ test('saving a folder through the proxy shows up in the addon right away', async
 test("a movie's stream list offers S-library's folders", async () => {
   // Stremio Web (a browser, which sends an Origin header) gets web pages.
   const web = await (await fetch(`${base}/${config}/stream/movie/tt0111161.json`, { headers: { origin: 'https://web.stremio.com' } })).json();
-  assert.equal(web.streams[0].description, '＋ Add to this folder');
+  assert.equal(web.streams[0].description, '＋ Tap to add it to this folder');
   assert.equal(web.streams[0].externalUrl, `${base}/${config}/act/add/fav/movie/tt0111161`);
   assert.match(web.streams.at(-1).externalUrl, /configure#new=movie%3Att0111161$/);
   // The Stremio apps get pages inside Stremio.
@@ -184,15 +189,23 @@ test('adding a title from the stream list stores it and confirms', async () => {
   assert.deepEqual(folder.items.map((item) => item.id), ['tt0133093', 'tt0111161']);
   // The stream list now shows it's in the folder.
   const { body } = await get(`/${config}/stream/movie/tt0111161.json`);
-  assert.equal(body.streams[0].description, '✓ In this folder · tap to take it out');
+  assert.equal(body.streams[0].description, '✓ Already in this folder\n✕ Tap to remove it (asks first)');
 
   // A title that isn't in the library gets its name from Cinemeta.
   await fetch(`${base}/${config}/act/add/fav/movie/tt1375666`);
   [folder] = S.fromLibraryItems([...api.library.values()]);
   assert.deepEqual(folder.items.at(-1), { id: 'tt1375666', type: 'movie', name: 'Inception', poster: 'https://example.com/inception.jpg' });
 
+  // Taking a title out asks first, and changes nothing until confirmed.
+  const ask = await (await fetch(`${base}/${config}/act/remove-ask/fav/movie/tt0111161`)).text();
+  assert.match(ask, /Remove &quot;The Shawshank Redemption&quot; from &quot;Favorites&quot;\?/);
+  assert.match(ask, new RegExp(`href="${base}/${config}/act/remove/fav/movie/tt0111161"`));
+  [folder] = S.fromLibraryItems([...api.library.values()]);
+  assert.ok(folder.items.some((item) => item.id === 'tt0111161'));
   const remove = await fetch(`${base}/${config}/act/remove/fav/movie/tt0111161`);
-  assert.match(await remove.text(), /✓ Took &quot;The Shawshank Redemption&quot; out of this folder/);
+  const removed = await remove.text();
+  assert.match(removed, /✓ Took &quot;The Shawshank Redemption&quot; out of this folder/);
+  assert.match(removed, new RegExp(`>Undo</a>`));
   [folder] = S.fromLibraryItems([...api.library.values()]);
   assert.deepEqual(folder.items.map((item) => item.id), ['tt0133093', 'tt1375666']);
 });
@@ -212,6 +225,15 @@ test('serves the icons for the configure page', async () => {
   const poster = await get('/img/poster/brown.png?name=Western&icon=western');
   assert.equal(poster.res.status, 200);
   assert.notDeepEqual(poster.body, (await get('/img/poster/brown.png?name=Western')).body);
+});
+
+test("Stremio's own \"Remove from library\" only takes a folder out of the Library", async () => {
+  const fav = api.library.get('slib:fav');
+  // What Stremio does when you press the button on the folder's page.
+  await post('/api/datastorePut', { authKey: 'test-auth-key', collection: 'libraryItem', changes: [{ ...fav, removed: true }] });
+  const { body } = await get(`/${config}/catalog/folder/slib.json`);
+  assert.ok(body.metas.some((m) => m.id === 'slib:fav'), 'the folder is still there');
+  await post('/api/datastorePut', { authKey: 'test-auth-key', collection: 'libraryItem', changes: [{ ...fav, removed: false }] });
 });
 
 test('limits sign-in attempts per client', async () => {

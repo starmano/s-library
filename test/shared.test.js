@@ -150,6 +150,35 @@ test('folders can be hidden from the Library and shown again', () => {
   assert.deepEqual(load(library).map((f) => f.id).sort(), ['abc123', 'new1']);
 });
 
+test("Stremio's own \"Remove from library\" takes a folder out of the Library without deleting it", () => {
+  const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
+  // Before: removing a folder from the Library with Stremio's button deleted it.
+  save(library, S.toLibraryItems({ id: 'gone', name: 'Gone', items: [] }, { baseUrl: BASE, previous: library }));
+  library.get('slib:gone').removed = true;
+  assert.deepEqual(load(library).map((f) => f.id), ['abc123']);
+
+  // The migration keeps those deleted, once.
+  const migration = S.migrationItems(library);
+  assert.deepEqual(migration.map((item) => [item._id, item.type]), [['slib:gone', 'slibrary-removed'], ['slib::settings', 'slibrary']]);
+  save(library, migration);
+  assert.deepEqual(S.migrationItems(library), [], 'only once');
+  assert.deepEqual(load(library).map((f) => f.id), ['abc123']);
+
+  // After: the folder only leaves the Library, and stays out of it when it's edited.
+  library.get('slib:abc123').removed = true;
+  assert.deepEqual(load(library).map((f) => f.id), ['abc123']);
+  save(library, S.toLibraryItems({ ...load(library)[0], name: 'Renamed' }, { baseUrl: BASE, previous: library }));
+  assert.equal(library.get('slib:abc123').removed, true);
+  // Stremio's "Add to library" brings it back.
+  library.get('slib:abc123').removed = false;
+  assert.equal(load(library)[0].name, 'Renamed');
+  // The Library switch still shows or hides every folder.
+  library.get('slib:abc123').removed = true;
+  save(library, S.settingsItems({ library: false }, { previous: library }));
+  save(library, S.settingsItems({ library: true }, { previous: library }));
+  assert.equal(library.get('slib:abc123').removed, false);
+});
+
 test('a deleted folder stays deleted whether folders are shown or hidden', () => {
   const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
   save(library, S.settingsItems({ library: false }, { previous: library }));
@@ -172,7 +201,7 @@ test('a folder can leave its name off the poster, or have no icon', () => {
 
 test('folders can be left out of Discover and search', () => {
   const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
-  assert.deepEqual(S.readSettings(library.values()), { library: true, discover: true, search: true, version: 0, stored: false });
+  assert.deepEqual(S.readSettings(library.values()), { library: true, discover: true, search: true, version: 0, keep: false, stored: false });
   const now = new Date('2026-02-01T00:00:00Z');
   const changes = S.settingsItems({ discover: false }, { previous: library, now });
   assert.deepEqual(changes.map((item) => item._id), ['slib::settings'], 'the folders themselves are not touched');
