@@ -4,7 +4,7 @@
 'use strict';
 
 const stremio = require('./stremio-api');
-const { ID_PREFIX, LIMITS, isColor, colorOf, toLibraryItems, deletionItems, settingsItems } = require('./shared');
+const { ID_PREFIX, LIMITS, NO_ICON, isColor, colorOf, toLibraryItems, deletionItems, settingsItems } = require('./shared');
 const { ICONS } = require('./images');
 const { decodeText, splitTitle } = require('./addon');
 
@@ -34,7 +34,7 @@ async function runAction(authKey, action, { baseUrl }) {
         shown
           ? '✓ Your folders show in your Stremio Library again, next to your movies and shows.'
           : '✓ Your folders are hidden from your Stremio Library. Find them on the Board, in Discover under the type "Folder", or by searching.',
-        settingsItems(shown, { previous })
+        settingsItems({ library: shown }, { previous })
       );
     }
 
@@ -91,6 +91,7 @@ async function runAction(authKey, action, { baseUrl }) {
         return show(`✓ Color changed to ${colorOf(color).label.toLowerCase()}.`, save({ ...folder, color }), { structural: true });
       }
       case 'icon': {
+        if (action.arg === NO_ICON) return show('✓ Icon removed.', save({ ...folder, icon: NO_ICON }));
         if (!Object.prototype.hasOwnProperty.call(ICONS, action.arg)) return show('That icon is not available.');
         return show(`✓ Icon changed to ${ICONS[action.arg].label.toLowerCase()}.`, save({ ...folder, icon: action.arg }));
       }

@@ -148,6 +148,10 @@ test('color and icon links on the folder page', async () => {
 
   page = await open(linkTo(page, 'Color', '📁 None'));
   assert.equal(folder('fav').color, null);
+  page = await open(linkTo(page, 'Icon', 'No icon'));
+  assert.match(page.description, /^✓ Icon removed\./);
+  assert.equal(folder('fav').icon, 'none');
+  assert.match(page.poster, /icon=none/);
 });
 
 test('moving folders up and down', async () => {
@@ -231,7 +235,7 @@ test('broken or unknown links show the S-library page', async () => {
   assert.equal(gone.name, 'S-library');
   assert.equal(gone.description, "This folder doesn't exist anymore.");
   const version = folder('fav').version;
-  assert.match((await open(`slib:do:color:fav:${version}:pink`)).description, /not available/);
+  assert.match((await open(`slib:do:color:fav:${version}:chartreuse`)).description, /not available/);
   assert.match((await open(`slib:do:explode:fav:${version}`)).description, /does not know this link/);
   const expired = S.encodeConfig({ k: 'expired' });
   const { meta } = await (await fetch(`${base}/${expired}/meta/folder/${encodeURIComponent('slib:do:help:-:0:new')}.json`)).json();

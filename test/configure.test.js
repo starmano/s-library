@@ -38,9 +38,20 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   const page = await browser.newPage();
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
-  await page.route('https://v3-cinemeta.strem.io/**', (route) => route.fulfill({
-    json: { metas: route.request().url().includes('/movie/') ? [{ id: 'tt1375666', type: 'movie', name: 'Inception', releaseInfo: '2010' }] : [] }
-  }));
+  // A stand-in for Cinemeta: title details (with genres), genre lists (most popular first) and search.
+  const movie = (id, name, popularity) => ({ id, type: 'movie', name, popularity });
+  const cinemetaApi = {
+    '/meta/movie/tt0133093.json': { meta: { id: 'tt0133093', genres: ['Action', 'Sci-Fi'] } },
+    '/meta/movie/tt1375666.json': { meta: { id: 'tt1375666', genres: ['Action', 'Adventure', 'Sci-Fi'] } },
+    '/catalog/movie/top/genre=Action.json': { metas: [movie('tt1375666', 'Inception', 90), movie('tt0468569', 'The Dark Knight', 50), movie('tt2911666', 'John Wick', 30)] },
+    '/catalog/movie/top/genre=Sci-Fi.json': { metas: [movie('tt0816692', 'Interstellar', 60), movie('tt1160419', 'Dune', 40)] },
+    '/catalog/movie/top/genre=Adventure.json': { metas: [movie('tt0816692', 'Interstellar', 60), movie('tt1160419', 'Dune', 40)] },
+    '/catalog/movie/top/search=incep.json': { metas: [{ id: 'tt1375666', type: 'movie', name: 'Inception', releaseInfo: '2010' }] }
+  };
+  await page.route('https://v3-cinemeta.strem.io/**', (route) => {
+    const { pathname } = new URL(route.request().url());
+    route.fulfill({ json: cinemetaApi[decodeURIComponent(pathname)] || { metas: [] } });
+  });
   // What Stremio's servers hold (the fake API drops non-standard fields, like the real one).
   const stored = () => S.fromLibraryItems([...api.library.values()]);
 
@@ -70,30 +81,61 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   await page.click('#new-folder');
   await page.fill('#f-name', 'Favorites');
   await page.fill('#f-description', 'All-time favorites');
+  // Colors and icons are behind "+", and picking one closes the list again.
+  assert.equal(await page.isVisible('#f-colors'), false);
+  await page.click('#f-color-button');
   await page.click('.swatch[title=Red]');
+  assert.equal(await page.isVisible('#f-colors'), false);
+  assert.match(await page.textContent('#f-color-current'), /Red/);
+  await page.click('#f-icon-button');
+  assert.equal(await page.locator('.icon-option').count(), Object.keys(require('../icons/icons.json')).length + 1, 'every icon, and "No icon"');
   await page.click('.icon-option[title=Romance]');
+  assert.equal(await page.isVisible('#f-icons'), false);
+  assert.match(await page.textContent('#f-icon-current'), /Romance/);
+  await page.waitForFunction(() => /red\.png\?name=Favorites&icon=heart$/.test(document.querySelector('#f-preview').src));
   await page.click('#f-results li:has-text("The Matrix") button');
   await page.click('[data-source=search]');
   await page.fill('#f-query', 'incep');
   await page.click('#f-results li:has-text("Inception") button');
+  // Recommended: titles that share genres with the folder's, most popular first.
+  await page.click('[data-source=recommended]');
+  await page.waitForFunction(() => document.querySelectorAll('#f-results li').length === 4);
+  assert.deepEqual(await page.locator('#f-results .title').evaluateAll((titles) => titles.map((t) => t.firstChild.textContent)),
+    ['Interstellar', 'The Dark Knight', 'Dune', 'John Wick']);
+  assert.match(await page.textContent('#f-results-hint'), /Popular in Action, Sci-Fi and Adventure/);
+  await page.click('#f-results li:has-text("Interstellar") button');
   await page.click('#f-save');
   await page.waitForSelector('.folder');
 
-  // A second folder without a color: the previous color must not stick.
+  // A second folder without a color: the previous color must not stick. It has no icon, and
+  // its name is left off the poster.
   await page.click('#new-folder');
+  assert.match(await page.textContent('#f-color-current'), /No color/);
+  await page.click('[data-source=recommended]');
+  assert.match(await page.textContent('#f-results-hint'), /Add a few movies or shows first/);
+  await page.click('[data-source=library]');
   await page.click('#f-results li:has-text("Breaking Bad") button');
   await page.fill('#f-name', 'Watch later');
+  await page.click('#f-icon-button');
+  await page.click('.icon-option[title="No icon"]');
+  await page.uncheck('#f-show-name');
+  await page.waitForFunction(() => /\/img\/poster\/none\.png\?icon=none$/.test(document.querySelector('#f-preview').src));
+  // The buttons stay on screen on a phone, however long the editor is.
+  await page.setViewportSize({ width: 390, height: 640 });
+  const save = await page.locator('#f-save').boundingBox();
+  assert.ok(save.y + save.height <= 640, `Save is on screen (bottom at ${save.y + save.height})`);
   await page.click('#f-save');
   await page.waitForFunction(() => document.querySelectorAll('.folder').length === 2);
 
   let folders = stored();
   assert.deepEqual(folders.map((f) => [f.name, f.color, f.items.map((i) => i.id)]), [
-    ['Favorites', 'red', ['tt0133093', 'tt1375666']],
+    ['Favorites', 'red', ['tt0133093', 'tt1375666', 'tt0816692']],
     ['Watch later', null, ['tt0903747']]
   ]);
   assert.equal(folders[0].description, 'All-time favorites');
-  assert.equal(folders[0].icon, 'heart');
-  assert.equal(folders[1].icon, 'folder');
+  assert.deepEqual([folders[0].icon, folders[0].showName], ['heart', true]);
+  assert.deepEqual([folders[1].icon, folders[1].showName], ['none', false]);
+  assert.equal(await page.getAttribute('.folder >> nth=1 >> img', 'src'), `${base}/img/poster/none.png?icon=none`);
 
   // Reorder, then rename and take a title out through the editor.
   await page.click('button[aria-label="Move Watch later up"]');
@@ -106,7 +148,7 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   folders = stored();
   assert.deepEqual(folders.map((f) => [f.name, f.items.map((i) => i.id)]), [
     ['Watch later', ['tt0903747']],
-    ['Best of all time', ['tt1375666']]
+    ['Best of all time', ['tt1375666', 'tt0816692']]
   ]);
 
   // The installed copy of the manifest picks up the folder rows (refreshed in the background);
@@ -123,7 +165,7 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   // the folders as stored, titles included; then delete one.
   await page.goto(`${base}/${config}/configure`);
   await page.waitForSelector('#app:not([hidden])');
-  assert.deepEqual(await page.locator('.folder-meta').allTextContents(), ['1 title', '1 title']);
+  assert.deepEqual(await page.locator('.folder-meta').allTextContents(), ['1 title', '2 titles']);
   page.once('dialog', (dialog) => dialog.accept());
   await page.click('.folder >> nth=0 >> text=Edit');
   await page.click('#f-delete');
@@ -163,5 +205,19 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   await page.click('#show-in-library');
   await page.waitForSelector('#show-in-library:checked:enabled');
   assert.equal(inLibrary(), 2);
+
+  // Folders can be left out of Discover (and so the Board), which updates the installed addon,
+  // and out of search.
+  await page.click('#show-in-discover');
+  await page.waitForSelector('#show-in-discover:not(:checked):enabled');
+  for (let i = 0; i < 50 && rows() !== 'S-library'; i++) await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(rows(), 'S-library');
+  await page.click('#show-in-search');
+  await page.waitForSelector('#show-in-search:not(:checked):enabled');
+  assert.equal(await page.isVisible('#nowhere'), false);
+  await page.click('#show-in-library');
+  await page.waitForSelector('#nowhere:not([hidden])');
+  const settings = S.readSettings(api.library.values());
+  assert.deepEqual([settings.library, settings.discover, settings.search], [false, false, false]);
   assert.deepEqual(errors, []);
 });

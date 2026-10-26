@@ -27,7 +27,8 @@ const folders = [
   },
   { id: 'later', name: 'Watch later', description: '', color: null, order: 1, icon: 'folder', version: 0, items: [] }
 ];
-const library = { folders, settings: { library: true, version: 0 } };
+const settings = { library: true, discover: true, search: true, version: 0 };
+const library = { folders, settings };
 
 test('unconfigured manifest asks to be configured', () => {
   const manifest = addon.manifest(null, ctx);
@@ -37,7 +38,7 @@ test('unconfigured manifest asks to be configured', () => {
 });
 
 test('configured manifest has one catalog per folder, marked with its color', () => {
-  const manifest = addon.manifest(folders, ctx);
+  const manifest = addon.manifest(library, ctx);
   assert.equal(manifest.behaviorHints.configurationRequired, false);
   assert.deepEqual(manifest.types, ['folder', 'movie', 'series', 'anime']);
   assert.equal(manifest.idPrefixes, undefined, 'a manifest-wide prefix would hide movies from the stream resource');
@@ -57,8 +58,29 @@ test('configured manifest has one catalog per folder, marked with its color', ()
   );
 });
 
+test('folders can be left out of Discover (and the Board) and out of search', () => {
+  const off = { folders, settings: { ...settings, discover: false, search: false } };
+  assert.deepEqual(addon.manifest(off, ctx).catalogs.map((c) => c.id), ['slib.search'], 'search commands keep working');
+  assert.ok(!addon.meta(off, 'slib:fav', ctx).links.some((l) => l.name === 'Open as a grid'));
+  assert.deepEqual(addon.catalog(off, 'slib.search', { search: 'fav' }, ctx).metas, []);
+  assert.match(addon.catalog(off, 'slib.search', { search: 'new folder: Road trip' }, ctx).metas[0].id, /^slib:do:new:/);
+  assert.match(addon.catalog(off, 'slib.search', { search: 'rename Favorites: Best' }, ctx).metas[0].id, /^slib:do:rename:fav:5:/);
+  const on = addon.catalog(library, 'slib.search', { search: 'fav' }, ctx).metas;
+  assert.deepEqual(on.map((m) => m.id.split(':').slice(0, 3).join(':')), ['slib:fav', 'slib:do:new']);
+});
+
+test('posters can leave out the name or the icon', () => {
+  const plain = { ...folders[0], showName: false, icon: 'none' };
+  const [meta] = addon.catalog({ folders: [plain], settings }, 'slib', {}, ctx).metas;
+  assert.equal(meta.name, 'Favorites');
+  assert.equal(meta.poster, 'https://addon.test/img/poster/red.png?icon=none');
+  const icons = addon.meta({ folders: [plain], settings }, 'slib:fav', ctx).links.filter((l) => l.category === 'Icon');
+  assert.equal(icons[0].name, '✓ No icon');
+  assert.ok(icons.length > 90);
+});
+
 test('the S-library catalog lists the folders themselves', () => {
-  const { metas } = addon.catalog(folders, 'slib', {}, ctx);
+  const { metas } = addon.catalog(library, 'slib', {}, ctx);
   assert.equal(metas.length, 2);
   assert.deepEqual(metas[0], {
     id: 'slib:fav',
@@ -74,15 +96,15 @@ test('the S-library catalog lists the folders themselves', () => {
 });
 
 test('a folder catalog lists its titles, with pagination', () => {
-  const { metas } = addon.catalog(folders, 'slib.fav', {}, ctx);
+  const { metas } = addon.catalog(library, 'slib.fav', {}, ctx);
   assert.deepEqual(metas, [
     { id: 'tt0133093', type: 'movie', name: 'The Matrix', poster: 'https://images.metahub.space/poster/medium/tt0133093/img' },
     { id: 'kitsu:1', type: 'series', name: 'Cowboy Bebop', poster: 'https://example.com/bebop.jpg' }
   ]);
-  const big = [{ ...folders[0], items: Array.from({ length: 150 }, (_, i) => ({ id: `tt${i}`, type: 'movie', name: `#${i}` })) }];
+  const big = { folders: [{ ...folders[0], items: Array.from({ length: 150 }, (_, i) => ({ id: `tt${i}`, type: 'movie', name: `#${i}` })) }], settings };
   assert.equal(addon.catalog(big, 'slib.fav', {}, ctx).metas.length, addon.PAGE_SIZE);
   assert.equal(addon.catalog(big, 'slib.fav', { skip: '100' }, ctx).metas[0].name, '#100');
-  assert.deepEqual(addon.catalog(folders, 'slib.missing', {}, ctx).metas, []);
+  assert.deepEqual(addon.catalog(library, 'slib.missing', {}, ctx).metas, []);
 });
 
 test('folder meta has description and links to its titles', () => {

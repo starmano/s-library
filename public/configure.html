@@ -105,7 +105,10 @@
   .note { font-size: 13px; color: var(--muted); margin: 0; }
   .actions + .note { margin-top: 12px; }
   .tip { margin-top: 14px; }
-  .setting { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); font-weight: 600; cursor: pointer; }
+  .settings { margin-top: 4px; }
+  .setting { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; padding: 14px 0; font-weight: 600; cursor: pointer; }
+  .setting + .setting { border-top: 1px solid var(--border); }
+  .warning { color: #ffc53d; }
   .setting input {
     appearance: none; -webkit-appearance: none; position: relative; width: 42px; height: 24px; margin: 1px 0 0; padding: 0;
     border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); cursor: pointer; transition: background .15s;
@@ -116,13 +119,31 @@
   .setting input:disabled { cursor: progress; opacity: .6; }
   .setting small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; font-size: 13px; }
 
+  /* The editor scrolls inside, so its buttons always stay at the bottom of the screen. */
   dialog {
-    width: min(680px, 100vw - 24px); max-height: calc(100vh - 24px); padding: 0;
+    width: min(680px, 100vw - 24px); max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); padding: 0; overflow: hidden;
     color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   }
+  dialog[open] { display: flex; flex-direction: column; }
   dialog::backdrop { background: rgb(5 4 10 / .75); }
-  dialog form { display: grid; gap: 18px; padding: 22px; }
-  dialog footer { display: flex; gap: 10px; flex-wrap: wrap; position: sticky; bottom: -22px; margin: 0 -22px -22px; padding: 14px 22px 22px; background: var(--surface); border-top: 1px solid var(--border); }
+  dialog form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .editor-body { display: grid; gap: 18px; padding: 22px; overflow-y: auto; overscroll-behavior: contain; flex: 1; min-height: 0; }
+  dialog footer {
+    display: flex; gap: 10px; flex-wrap: wrap; flex-shrink: 0; padding: 14px 22px; padding-bottom: max(14px, env(safe-area-inset-bottom));
+    background: var(--surface); border-top: 1px solid var(--border);
+  }
+  .editor-head { display: grid; grid-template-columns: 1fr 84px; gap: 16px; align-items: start; }
+  .name-fields { display: grid; gap: 10px; }
+  .preview { width: 84px; aspect-ratio: 2 / 3; border-radius: 8px; object-fit: cover; background: var(--surface-2); box-shadow: 0 6px 18px rgb(0 0 0 / .35); }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); cursor: pointer; }
+  .check input { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: var(--accent); }
+  .picker-button { justify-content: flex-start; width: 100%; padding: 8px 12px; font-weight: 500; }
+  .picker-current { display: flex; align-items: center; gap: 10px; }
+  .picker-current svg { width: 22px; height: 22px; fill: currentColor; }
+  .picker-button .plus { margin-left: auto; font-size: 22px; line-height: 1; color: var(--muted); }
+  .picker-panel { margin-top: 10px; }
+  .dot { width: 22px; height: 22px; border-radius: 50%; background: var(--c); border: 2px solid rgb(255 255 255 / .15); }
+  .dot.none { background: none; border: 2px dashed var(--muted); }
   .spacer { flex: 1; }
   fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
   legend { padding: 0; margin-bottom: 6px; }
@@ -138,6 +159,7 @@
   .icon-option input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
   .icon-option span { display: grid; place-items: center; height: 42px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
   .icon-option svg { width: 24px; height: 24px; fill: currentColor; }
+  .icon-option.none span { border-style: dashed; }
   .icon-option input:checked + span { border-color: var(--accent); background: rgb(123 91 245 / .22); color: var(--text); }
   .icon-option input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -145,7 +167,7 @@
   .picked li { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 4px 3px 12px; max-width: 100%; }
   .picked li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .picked button { padding: 2px 8px; border-radius: 999px; border: 0; background: none; color: var(--muted); }
-  .tabs { display: flex; gap: 6px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
   .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
   .results { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; max-height: 320px; overflow-y: auto; font-weight: 400; }
   .results li { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; padding: 6px; border-radius: 10px; background: var(--surface-2); }
@@ -167,7 +189,10 @@
     .folder { grid-template-columns: 44px 1fr; }
     .folder-icon { width: 44px; }
     .folder-tools { grid-column: 1 / -1; justify-content: flex-end; }
-    dialog { width: 100vw; max-width: 100vw; max-height: 100vh; height: 100vh; border-radius: 0; }
+    dialog { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100vh; max-height: 100dvh; border: 0; border-radius: 0; }
+    .editor-body { padding: 18px 16px; }
+    .tabs button { padding: 9px 12px; }
+    dialog footer { padding-left: 16px; padding-right: 16px; }
   }
   @media (prefers-reduced-motion: reduce) { #toast, .setting input, .setting input::before { transition: none; } }
 </style>
@@ -222,10 +247,25 @@
       <ul id="folders" class="folders"></ul>
       <p id="no-folders" class="empty" hidden>No folders yet. Create your first one.</p>
       <p class="note tip">In Stremio, open any movie or show: your folders are listed with its streams, so you can add it to one (or start a new folder) right there. Open a folder in Stremio to rename, recolor, move or delete it, or search for "new folder: " and a name to create one.</p>
-      <label class="setting">
-        <input id="show-in-library" type="checkbox" role="switch">
-        <span>Show folders in my Stremio Library<small>When off, folders stay on the Board, in Discover and in Stremio's search, but not between your movies and shows in the Library.</small></span>
-      </label>
+    </section>
+
+    <section class="card">
+      <h2>Where folders show in Stremio</h2>
+      <div class="settings">
+        <label class="setting">
+          <input id="show-in-library" data-setting="library" type="checkbox" role="switch">
+          <span>Show folders in my Stremio Library<small>When off, the Library only shows your movies and shows.</small></span>
+        </label>
+        <label class="setting">
+          <input id="show-in-discover" data-setting="discover" type="checkbox" role="switch">
+          <span>Show folders in Discover<small>This includes the S-library rows on the Board: Stremio shows the same rows in both places.</small></span>
+        </label>
+        <label class="setting">
+          <input id="show-in-search" data-setting="search" type="checkbox" role="switch">
+          <span>Show folders in search<small>When off, searching in Stremio doesn't list your folders. Searching for "new folder: " and a name, and the Rename and Description links on folder pages, still work.</small></span>
+        </label>
+      </div>
+      <p id="nowhere" class="note warning" hidden>Your folders don't show anywhere in Stremio now. You can still reach them from the list of streams of a movie or show.</p>
     </section>
 
     <section class="card">
@@ -243,35 +283,50 @@
 
 <dialog id="editor" aria-labelledby="editor-title">
   <form id="editor-form">
-    <h2 id="editor-title">New folder</h2>
-    <label class="field"><span>Name</span>
-      <input id="f-name" maxlength="60" required>
-    </label>
-    <label class="field"><span>Description <span class="muted">(optional)</span></span>
-      <textarea id="f-description" maxlength="500" rows="3"></textarea>
-    </label>
-    <fieldset class="field">
-      <legend>Color <span class="muted">(optional)</span></legend>
-      <div id="f-colors" class="swatches"></div>
-    </fieldset>
-    <fieldset id="f-icon-field" class="field" hidden>
-      <legend>Icon</legend>
-      <div id="f-icons" class="icons"></div>
-    </fieldset>
-    <div class="field">
-      <span>Titles in this folder <span id="f-count" class="muted"></span></span>
-      <ul id="f-items" class="picked"></ul>
-      <p id="f-items-empty" class="hint">Nothing here yet. Add titles below.</p>
-    </div>
-    <div class="field">
-      <span>Add titles</span>
-      <div class="tabs" role="tablist">
-        <button type="button" role="tab" data-source="library" aria-selected="true">Your library</button>
-        <button type="button" role="tab" data-source="search" aria-selected="false">Search Stremio</button>
+    <div class="editor-body">
+      <h2 id="editor-title">New folder</h2>
+      <div class="editor-head">
+        <div class="name-fields">
+          <label class="field"><span>Name</span>
+            <input id="f-name" maxlength="60" required>
+          </label>
+          <label class="check"><input id="f-show-name" type="checkbox" checked> Show the name on the poster</label>
+        </div>
+        <img id="f-preview" class="preview" alt="Poster preview">
       </div>
-      <input id="f-query" type="search" aria-label="Find titles" autocomplete="off">
-      <ul id="f-results" class="results"></ul>
-      <p id="f-results-hint" class="hint" hidden></p>
+      <label class="field"><span>Description <span class="muted">(optional)</span></span>
+        <textarea id="f-description" maxlength="500" rows="3"></textarea>
+      </label>
+      <fieldset class="field">
+        <legend>Color <span class="muted">(optional)</span></legend>
+        <button id="f-color-button" class="picker-button" type="button" aria-expanded="false" aria-controls="f-colors" title="Choose a color">
+          <span id="f-color-current" class="picker-current"></span><span class="plus" aria-hidden="true">+</span>
+        </button>
+        <div id="f-colors" class="swatches picker-panel" hidden></div>
+      </fieldset>
+      <fieldset id="f-icon-field" class="field" hidden>
+        <legend>Icon <span class="muted">(optional)</span></legend>
+        <button id="f-icon-button" class="picker-button" type="button" aria-expanded="false" aria-controls="f-icons" title="Choose an icon">
+          <span id="f-icon-current" class="picker-current"></span><span class="plus" aria-hidden="true">+</span>
+        </button>
+        <div id="f-icons" class="icons picker-panel" hidden></div>
+      </fieldset>
+      <div class="field">
+        <span>Titles in this folder <span id="f-count" class="muted"></span></span>
+        <ul id="f-items" class="picked"></ul>
+        <p id="f-items-empty" class="hint">Nothing here yet. Add titles below.</p>
+      </div>
+      <div class="field">
+        <span>Add titles</span>
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" data-source="library" aria-selected="true">Your library</button>
+          <button type="button" role="tab" data-source="search" aria-selected="false">Search</button>
+          <button type="button" role="tab" data-source="recommended" aria-selected="false">Recommended</button>
+        </div>
+        <input id="f-query" type="search" aria-label="Find titles" autocomplete="off">
+        <p id="f-results-hint" class="hint" hidden></p>
+        <ul id="f-results" class="results"></ul>
+      </div>
     </div>
     <footer>
       <button id="f-delete" class="danger" type="button">Delete folder</button>
@@ -301,8 +356,14 @@
     source: 'library',
     searchResults: [],
     searching: false,
-    searchSeq: 0
+    searchSeq: 0,
+    recommendations: [],
+    recommendGenres: [],
+    recommendFrom: 0,      // how many titles the recommendations are based on
+    recommending: false,
+    recommendSeq: 0
   };
+  const CINEMETA = 'https://v3-cinemeta.strem.io';
 
   // Tiny DOM helper; text is always set via text nodes, never as HTML.
   function h(tag, props, ...children) {
@@ -539,7 +600,7 @@
   function renderFolders() {
     const list = $('#folders');
     list.replaceChildren(...state.folders.map((folder, index) => h('li', { class: 'folder', style: '--c:' + S.colorOf(folder.color).hex },
-      h('img', { class: 'folder-icon', src: S.posterUrl(location.origin, folder.color, folder.name, folder.icon), alt: '' }),
+      h('img', { class: 'folder-icon', src: S.folderPoster(location.origin, folder), alt: '' }),
       h('div', null,
         h('div', { class: 'folder-name' }, folder.name),
         h('div', { class: 'folder-meta' }, countLabel(folder.items.length)),
@@ -554,23 +615,38 @@
     $('#no-folders').hidden = state.folders.length > 0;
   }
 
+  // ---- Where folders show ----
+
+  const SETTING_MESSAGES = {
+    library: ['Folders are hidden from your Library', 'Folders show in your Library'],
+    discover: ['Folders are hidden from Discover and the Board', 'Folders show in Discover and on the Board'],
+    search: ['Folders are hidden from search', 'Folders show in search']
+  };
+
   function renderSettings() {
-    $('#show-in-library').checked = S.readSettings(state.raw.values()).library;
+    const settings = S.readSettings(state.raw.values());
+    document.querySelectorAll('[data-setting]').forEach((input) => {
+      input.checked = settings[input.dataset.setting];
+    });
+    $('#nowhere').hidden = settings.library || settings.discover || settings.search;
   }
 
   // Hiding folders from the Library marks them removed there, the way Stremio's own
-  // "Remove from library" does; S-library still lists them everywhere else.
-  $('#show-in-library').addEventListener('change', (event) => {
-    const input = event.currentTarget;
-    const show = input.checked;
-    busy(input, async () => {
-      try {
-        await put(S.settingsItems(show, { previous: state.raw }));
-        toast(show ? 'Folders show in your Library' : 'Folders are hidden from your Library');
-      } catch (err) {
-        toast(err.message, true);
-      }
-      renderSettings();
+  // "Remove from library" does. Discover and search are up to the addon, and saving
+  // updates the copy of it Stremio keeps.
+  document.querySelectorAll('[data-setting]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const key = input.dataset.setting;
+      const show = input.checked;
+      busy(input, async () => {
+        try {
+          await put(S.settingsItems({ [key]: show }, { previous: state.raw }));
+          toast(SETTING_MESSAGES[key][Number(show)]);
+        } catch (err) {
+          toast(err.message, true);
+        }
+        renderSettings();
+      });
     });
   });
 
@@ -603,6 +679,61 @@
       h('span', { style: '--c:' + color.hex })))
   );
 
+  // A circle with a line through it, for "No icon".
+  const NO_ICON_PATH = 'M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm88,104a87.56,87.56,0,0,1-20.41,56.28L71.72,60.4A88,88,0,0,1,216,128ZM40,128A87.56,87.56,0,0,1,60.41,71.72L184.28,195.6A88,88,0,0,1,40,128Z';
+  let icons = {};
+
+  // The color and icon pickers show the current choice, and "+" opens the full list. Picking
+  // with a click or tap closes it again; arrow keys just move through the choices.
+  function picker(button, panel, render) {
+    let pointerAt = 0;
+    const open = (value) => {
+      panel.hidden = !value;
+      button.setAttribute('aria-expanded', String(value));
+      button.querySelector('.plus').textContent = value ? '−' : '+';
+    };
+    button.addEventListener('click', () => open(panel.hidden));
+    panel.addEventListener('pointerdown', () => { pointerAt = Date.now(); });
+    panel.addEventListener('change', () => {
+      render();
+      updatePreview();
+      if (Date.now() - pointerAt < 1500) {
+        open(false);
+        button.focus();
+      }
+    });
+    return { open, render };
+  }
+
+  function chosenIcon() {
+    return form.icon ? form.icon.value : state.draft ? state.draft.icon : S.DEFAULT_ICON;
+  }
+
+  const colorPicker = picker($('#f-color-button'), $('#f-colors'), () => {
+    const key = form.color.value;
+    $('#f-color-current').replaceChildren(
+      h('span', { class: S.isColor(key) ? 'dot' : 'dot none', style: '--c:' + S.colorOf(key).hex }),
+      S.isColor(key) ? S.COLORS[key].label : 'No color');
+  });
+
+  const iconPicker = picker($('#f-icon-button'), $('#f-icons'), () => {
+    const icon = icons[chosenIcon()];
+    $('#f-icon-current').replaceChildren(svgIcon(icon ? icon.path : NO_ICON_PATH), icon ? icon.label : 'No icon');
+  });
+
+  // The poster as Stremio will show it, drawn by the server.
+  let previewTimer;
+  function updatePreview(delay) {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      const color = S.isColor(form.color.value) ? form.color.value : null;
+      const name = $('#f-show-name').checked ? $('#f-name').value : '';
+      $('#f-preview').src = S.posterUrl(location.origin, color, name, chosenIcon());
+    }, delay || 0);
+  }
+  $('#f-name').addEventListener('input', () => updatePreview(400));
+  $('#f-show-name').addEventListener('change', () => updatePreview());
+
   // The icon picker uses the same icons the server draws on posters.
   function svgIcon(d) {
     const ns = 'http://www.w3.org/2000/svg';
@@ -617,12 +748,20 @@
 
   fetch('/icons.json')
     .then((res) => res.json())
-    .then((icons) => {
-      $('#f-icons').replaceChildren(...Object.entries(icons).map(([key, icon]) => h('label', { class: 'icon-option', title: icon.label },
-        h('input', { type: 'radio', name: 'icon', value: key, 'aria-label': icon.label }),
-        h('span', null, svgIcon(icon.path)))));
+    .then((list) => {
+      icons = list;
+      $('#f-icons').replaceChildren(
+        h('label', { class: 'icon-option none', title: 'No icon' },
+          h('input', { type: 'radio', name: 'icon', value: S.NO_ICON, 'aria-label': 'No icon' }),
+          h('span', null, svgIcon(NO_ICON_PATH))),
+        ...Object.entries(icons).map(([key, icon]) => h('label', { class: 'icon-option', title: icon.label },
+          h('input', { type: 'radio', name: 'icon', value: key, 'aria-label': icon.label }),
+          h('span', null, svgIcon(icon.path)))));
       $('#f-icon-field').hidden = false;
-      if (state.draft) form.icon.value = state.draft.icon;
+      if (state.draft) {
+        form.icon.value = state.draft.icon;
+        iconPicker.render();
+      }
     })
     .catch(() => {});
 
@@ -640,6 +779,7 @@
           description: '',
           color: null,
           icon: S.DEFAULT_ICON,
+          showName: true,
           items: [],
           order: state.folders.reduce((max, f) => Math.max(max, f.order + 1), 0),
           isNew: true
@@ -647,13 +787,20 @@
     $('#editor-title').textContent = folder ? 'Edit folder' : 'New folder';
     $('#f-name').value = state.draft.name;
     $('#f-description').value = state.draft.description;
+    $('#f-show-name').checked = state.draft.showName !== false;
     form.color.value = state.draft.color || 'none';
     if (form.icon) form.icon.value = state.draft.icon;
+    colorPicker.open(false);
+    iconPicker.open(false);
+    colorPicker.render();
+    iconPicker.render();
+    updatePreview();
     $('#f-delete').hidden = !folder;
     $('#f-query').value = '';
     setSource('library');
     renderPicked();
     editor.showModal();
+    $('.editor-body').scrollTop = 0;
     $('#f-name').focus();
   }
 
@@ -690,9 +837,18 @@
     document.querySelectorAll('.tabs [role="tab"]').forEach((tab) => {
       tab.setAttribute('aria-selected', String(tab.dataset.source === source));
     });
-    $('#f-query').placeholder = source === 'library' ? 'Filter your library…' : 'Search movies and series…';
+    $('#f-query').placeholder = {
+      library: 'Filter your library…',
+      search: 'Search movies and series…',
+      recommended: 'Filter recommendations…'
+    }[source];
     state.searchResults = [];
     if (source === 'search' && $('#f-query').value.trim()) search($('#f-query').value.trim());
+    if (source === 'recommended') {
+      // The box filters the recommendations; what was typed for another tab would hide them.
+      $('#f-query').value = '';
+      recommend();
+    }
     renderResults();
   }
 
@@ -706,9 +862,16 @@
     let hint = '';
     if (state.source === 'library') {
       results = query ? state.titles.filter((t) => t.name.toLowerCase().includes(query)) : state.titles;
-      if (!state.titles.length) hint = 'Your Stremio library is empty. Use "Search Stremio" instead.';
+      if (!state.titles.length) hint = 'Your Stremio library is empty. Use "Search" instead.';
       else if (!results.length) hint = 'No matches in your library.';
       else if (results.length > RESULTS_SHOWN) hint = 'Showing ' + RESULTS_SHOWN + ' of ' + results.length + '. Type to narrow it down.';
+    } else if (state.source === 'recommended') {
+      results = query ? state.recommendations.filter((t) => t.name.toLowerCase().includes(query)) : state.recommendations;
+      if (state.recommending) hint = 'Finding recommendations…';
+      else if (!state.recommendFrom) hint = "Add a few movies or shows first: recommendations are based on what's in this folder.";
+      else if (!state.recommendations.length) hint = 'No recommendations found.';
+      else if (!results.length) hint = 'No matches.';
+      else hint = 'Popular in ' + listText(state.recommendGenres) + ', like the titles in this folder. Most popular first.';
     } else {
       results = state.searchResults;
       if (!query) hint = 'Type a title to search Stremio.';
@@ -733,7 +896,7 @@
     state.searching = true;
     renderResults();
     const lists = await Promise.all(['movie', 'series'].map((type) =>
-      fetch('https://v3-cinemeta.strem.io/catalog/' + type + '/top/search=' + encodeURIComponent(query) + '.json')
+      fetch(CINEMETA + '/catalog/' + type + '/top/search=' + encodeURIComponent(query) + '.json')
         .then((res) => res.json())
         .then((data) => (Array.isArray(data.metas) ? data.metas : []))
         .catch(() => [])
@@ -751,9 +914,78 @@
     renderResults();
   }
 
+  function listText(words) {
+    return words.length > 1 ? words.slice(0, -1).join(', ') + ' and ' + words[words.length - 1] : words.join('');
+  }
+
+  // Recommendations: popular titles that share genres with the titles in the folder. Cinemeta
+  // has a list per genre, sorted by popularity. A title must be in the lists of at least two of
+  // the folder's main genres (or one, if that leaves too few), and the most popular come first.
+  const RECOMMEND_FROM = 30;   // most recently added titles to look at
+  const cinemetaCache = new Map();
+
+  function cinemeta(path) {
+    if (!cinemetaCache.has(path)) {
+      cinemetaCache.set(path, fetch(CINEMETA + path).then((res) => res.json()).catch(() => {
+        cinemetaCache.delete(path);
+        return null;
+      }));
+    }
+    return cinemetaCache.get(path);
+  }
+
+  async function recommend() {
+    const seq = ++state.recommendSeq;
+    const inFolder = new Set(state.draft.items.map((item) => item.id));
+    const sources = state.draft.items
+      .filter((item) => /^tt\d+$/.test(item.id) && (item.type === 'movie' || item.type === 'series'))
+      .slice(-RECOMMEND_FROM);
+    state.recommendations = [];
+    state.recommendGenres = [];
+    state.recommendFrom = sources.length;
+    state.recommending = sources.length > 0;
+    renderResults();
+    if (!sources.length) return;
+
+    const metas = await Promise.all(sources.map((item) => cinemeta('/meta/' + item.type + '/' + item.id + '.json')));
+    const genres = { movie: new Map(), series: new Map() };
+    metas.forEach((data, i) => {
+      const list = data && data.meta && (data.meta.genres || data.meta.genre);
+      const counts = genres[sources[i].type];
+      if (Array.isArray(list)) list.forEach((genre) => counts.set(genre, (counts.get(genre) || 0) + 1));
+    });
+    const lists = [];
+    for (const type of ['movie', 'series']) {
+      const top = Array.from(genres[type]).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([genre]) => genre);
+      top.forEach((genre) => lists.push({ type, genre, wanted: Math.min(2, top.length) }));
+    }
+    const results = await Promise.all(lists.map((list) =>
+      cinemeta('/catalog/' + list.type + '/top/genre=' + encodeURIComponent(list.genre) + '.json')));
+    if (seq !== state.recommendSeq) return;
+
+    const found = new Map();
+    results.forEach((data, i) => {
+      (data && Array.isArray(data.metas) ? data.metas : []).forEach((meta, rank) => {
+        if (!meta || !meta.id || !meta.name || inFolder.has(meta.id)) return;
+        const entry = found.get(meta.id) || { meta, type: lists[i].type, hits: 0, rank, wanted: lists[i].wanted };
+        entry.hits += 1;
+        entry.rank = Math.min(entry.rank, rank);
+        found.set(meta.id, entry);
+      });
+    });
+    let picks = Array.from(found.values()).filter((entry) => entry.hits >= entry.wanted);
+    if (picks.length < 12) picks = Array.from(found.values());
+    const popularity = picks.every((entry) => typeof entry.meta.popularity === 'number');
+    picks.sort((a, b) => (popularity ? b.meta.popularity - a.meta.popularity : a.rank - b.rank));
+    state.recommendations = picks.map(({ meta, type }) => ({ id: meta.id, type, name: meta.name, poster: meta.poster, year: meta.releaseInfo }));
+    state.recommendGenres = Array.from(new Set(lists.map((list) => list.genre)));
+    state.recommending = false;
+    renderResults();
+  }
+
   let searchTimer;
   $('#f-query').addEventListener('input', () => {
-    if (state.source === 'library') return renderResults();
+    if (state.source !== 'search') return renderResults();
     clearTimeout(searchTimer);
     const query = $('#f-query').value.trim();
     state.searchSeq++;
@@ -770,6 +1002,7 @@
     draft.description = $('#f-description').value.trim();
     draft.color = S.isColor(form.color.value) ? form.color.value : null;
     if (form.icon) draft.icon = S.cleanIcon(form.icon.value);
+    draft.showName = $('#f-show-name').checked;
     if (!draft.name) return $('#f-name').focus();
     // A new version makes edit links on folder pages already open in Stremio out of date.
     const changes = S.toLibraryItems(Object.assign({}, draft, { version: Date.now() }), { baseUrl: location.origin, previous: state.raw });

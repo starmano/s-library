@@ -56,10 +56,6 @@ function getLibrary(authKey) {
   return entry.promise;
 }
 
-async function getFolders(authKey) {
-  return (await getLibrary(authKey)).folders;
-}
-
 function forgetFolders(authKey) {
   cache.delete(authKey);
 }
@@ -119,4 +115,4 @@ async function describeTitle(authKey, type, id) {
   return { id, type, name: id };
 }
 
-module.exports = { request, getLibrary, getFolders, forgetFolders, editLibrary, describeTitle, updateInstalledManifest };
+module.exports = { request, getLibrary, forgetFolders, editLibrary, describeTitle, updateInstalledManifest };

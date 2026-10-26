@@ -8,7 +8,7 @@ const addon = require('./addon');
 const stremio = require('./stremio-api');
 const { runAction } = require('./actions');
 const { image } = require('./images');
-const { decodeConfig, posterUrl, ID_PREFIX, TYPE } = require('./shared');
+const { decodeConfig, readSettings, folderPoster, ID_PREFIX, TYPE } = require('./shared');
 const { version } = require('../package.json');
 
 // CHANGELOG.md sections: a "## 1.2.0 — 2026-10-26" heading followed by "- change" lines.
@@ -129,8 +129,8 @@ async function manifestRoute(req, res, [, configSegment]) {
   const config = configSegment && decodeConfig(configSegment);
   if (!config) return sendJson(res, 200, addon.manifest(null, context(req, configSegment)));
   // An unreachable Stremio API must not break the addon: fall back to the "All folders" catalog.
-  const folders = await stremio.getFolders(config.k).catch(() => []);
-  sendJson(res, 200, addon.manifest(folders, context(req, configSegment)));
+  const library = await stremio.getLibrary(config.k).catch(() => ({ folders: [], settings: readSettings([]) }));
+  sendJson(res, 200, addon.manifest(library, context(req, configSegment)));
 }
 
 async function resourceRoute(req, res, [, configSegment, resource, type, rawId, rawExtra]) {
@@ -152,7 +152,7 @@ async function resourceRoute(req, res, [, configSegment, resource, type, rawId, 
   if (resource === 'catalog') {
     // Stremio encodes each extra value, so a search can hold "&" or "+" of its own.
     const extra = Object.fromEntries(new URLSearchParams(rawExtra || ''));
-    return sendJson(res, 200, addon.catalog(library.folders, id, extra, ctx));
+    return sendJson(res, 200, addon.catalog(library, id, extra, ctx));
   }
   if (resource === 'stream') return sendJson(res, 200, addon.stream(library.folders, type, id, ctx));
   const meta = addon.meta(library, id, ctx);
@@ -160,10 +160,10 @@ async function resourceRoute(req, res, [, configSegment, resource, type, rawId, 
 }
 
 // After a change to the folder rows, updates the manifest Stremio keeps for S-library.
-function refreshInstalledManifest(authKey, configSegment, folders) {
+function refreshInstalledManifest(authKey, configSegment, library) {
   const suffix = `/${configSegment}/manifest.json`;
   stremio
-    .updateInstalledManifest(authKey, suffix, (link) => addon.manifest(folders, { baseUrl: link.slice(0, -suffix.length) }))
+    .updateInstalledManifest(authKey, suffix, (link) => addon.manifest(library, { baseUrl: link.slice(0, -suffix.length) }))
     .catch(() => {});
 }
 
@@ -171,14 +171,14 @@ function refreshInstalledManifest(authKey, configSegment, folders) {
 async function actionPageMeta(authKey, configSegment, id, action, ctx) {
   try {
     const outcome = await runAction(authKey, action, ctx);
-    if (outcome.structural) refreshInstalledManifest(authKey, configSegment, outcome.library.folders);
+    if (outcome.structural) refreshInstalledManifest(authKey, configSegment, outcome.library);
     const folder = outcome.library.folders.find((f) => f.id === outcome.folderId);
     if (outcome.page !== 'overview' && !folder) {
       return addon.actionMeta(id, { page: 'overview', library: outcome.library, message: "This folder doesn't exist anymore." }, ctx);
     }
     return addon.actionMeta(id, { ...outcome, folder }, ctx);
   } catch (err) {
-    const library = await stremio.getLibrary(authKey).catch(() => ({ folders: [], settings: { library: true, version: 0 } }));
+    const library = await stremio.getLibrary(authKey).catch(() => ({ folders: [], settings: readSettings([]) }));
     return addon.actionMeta(id, { page: 'overview', library, message: `That didn't work: ${err.message} Go back and try again.` }, ctx);
   }
 }
@@ -241,7 +241,7 @@ async function actionRoute(req, res, [, configSegment, verb, folderId, rawType, 
     const folder = outcome.library.folders.find((f) => f.id === folderId);
     if (!folder) throw new Error(outcome.message);
     actionPage(res, 200, {
-      image: posterUrl(ctx.baseUrl, folder.color, folder.name, folder.icon),
+      image: folderPoster(ctx.baseUrl, folder),
       heading: outcome.message,
       text: 'Press back to return to Stremio.',
       links: [

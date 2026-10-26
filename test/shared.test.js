@@ -39,6 +39,7 @@ test('a folder survives the Stremio API, which keeps only standard library field
     color: 'red',
     order: 2,
     icon: 'folder',
+    showName: true,
     version: 0,
     items: [
       { id: 'tt0133093', type: 'movie', name: 'The Matrix', poster: 'https://example.com/matrix.jpg' },
@@ -132,7 +133,7 @@ test('folders can be hidden from the Library and shown again', () => {
   assert.deepEqual(load(library).map((f) => f.id), ['abc123']);
   assert.equal(S.readSettings(library.values()).library, true);
 
-  save(library, S.settingsItems(false, { previous: library }));
+  save(library, S.settingsItems({ library: false }, { previous: library }));
   assert.equal(S.readSettings(library.values()).library, false);
   assert.equal(library.get('slib:abc123').removed, true, 'hidden from the Library');
   assert.equal(library.get('slib:gone').type, 'slibrary-removed', 'still deleted');
@@ -141,9 +142,9 @@ test('folders can be hidden from the Library and shown again', () => {
   // New folders follow the setting.
   save(library, S.toLibraryItems({ id: 'new1', name: 'New', items: [] }, { baseUrl: BASE, previous: library }));
   assert.equal(library.get('slib:new1').removed, true);
-  assert.deepEqual(S.settingsItems(false, { previous: library }), [], 'nothing to change');
+  assert.deepEqual(S.settingsItems({ library: false }, { previous: library }), [], 'nothing to change');
 
-  save(library, S.settingsItems(true, { previous: library }));
+  save(library, S.settingsItems({ library: true }, { previous: library }));
   assert.equal(library.get('slib:abc123').removed, false);
   assert.equal(library.get('slib:new1').removed, false);
   assert.deepEqual(load(library).map((f) => f.id).sort(), ['abc123', 'new1']);
@@ -151,11 +152,37 @@ test('folders can be hidden from the Library and shown again', () => {
 
 test('a deleted folder stays deleted whether folders are shown or hidden', () => {
   const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
-  save(library, S.settingsItems(false, { previous: library }));
+  save(library, S.settingsItems({ library: false }, { previous: library }));
   save(library, S.deletionItems('abc123', { previous: library }));
   assert.deepEqual(load(library), []);
-  save(library, S.settingsItems(true, { previous: library }));
+  save(library, S.settingsItems({ library: true }, { previous: library }));
   assert.deepEqual(load(library), []);
+});
+
+test('a folder can leave its name off the poster, or have no icon', () => {
+  const changes = S.toLibraryItems({ ...folder, showName: false, icon: 'none' }, { baseUrl: BASE, previous: new Map() });
+  assert.equal(changes[0].name, 'Favorites', 'the name is still the name');
+  assert.equal(changes[0].poster, 'https://addon.test/img/poster/red.png?icon=none');
+  const [loaded] = load(save(new Map(), changes));
+  assert.equal(loaded.showName, false);
+  assert.equal(loaded.icon, 'none');
+  assert.equal(S.folderPoster(BASE, loaded), changes[0].poster);
+  assert.equal(S.folderPoster(BASE, { ...loaded, showName: true, icon: 'folder' }), 'https://addon.test/img/poster/red.png?name=Favorites');
+});
+
+test('folders can be left out of Discover and search', () => {
+  const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
+  assert.deepEqual(S.readSettings(library.values()), { library: true, discover: true, search: true, version: 0, stored: false });
+  const now = new Date('2026-02-01T00:00:00Z');
+  const changes = S.settingsItems({ discover: false }, { previous: library, now });
+  assert.deepEqual(changes.map((item) => item._id), ['slib::settings'], 'the folders themselves are not touched');
+  save(library, changes);
+  save(library, S.settingsItems({ search: false }, { previous: library }));
+  const settings = S.readSettings(library.values());
+  assert.deepEqual([settings.library, settings.discover, settings.search], [true, false, false]);
+  assert.ok(settings.version > now.getTime());
+  assert.deepEqual(S.settingsItems({ discover: false, search: false }, { previous: library }), []);
+  assert.deepEqual(load(library).map((f) => f.id), ['abc123']);
 });
 
 test("a folder's version is stored with it", () => {
@@ -175,9 +202,9 @@ test('reads folders saved by the first version, and ignores everything else', ()
     null
   ]);
   assert.deepEqual(folders, [
-    { id: 'named', name: 'Anime', description: '', color: 'green', order: 0, icon: 'folder', version: 0, items: [] },
-    { id: 'junk', name: 'Untitled folder', description: '', color: null, order: 0, icon: 'folder', version: 0, items: [] },
-    { id: 'old', name: 'Westerns', description: '', color: 'brown', order: 0, icon: 'folder', version: 0, items: [] }
+    { id: 'named', name: 'Anime', description: '', color: 'green', order: 0, icon: 'folder', showName: true, version: 0, items: [] },
+    { id: 'junk', name: 'Untitled folder', description: '', color: null, order: 0, icon: 'folder', showName: true, version: 0, items: [] },
+    { id: 'old', name: 'Westerns', description: '', color: 'brown', order: 0, icon: 'folder', showName: true, version: 0, items: [] }
   ]);
 });
 
@@ -205,5 +232,7 @@ test('every color has a label, hex value and emoji', () => {
     assert.match(color.hex, /^#[0-9a-f]{6}$/);
     assert.ok(color.emoji);
   }
+  const emoji = Object.values(S.COLORS).map((color) => color.emoji).concat(S.NO_COLOR.emoji);
+  assert.equal(new Set(emoji).size, emoji.length, 'every color is marked differently in row names');
   assert.equal(S.colorOf('nope'), S.NO_COLOR);
 });

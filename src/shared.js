@@ -6,10 +6,11 @@
 //   slib:<id>                           the folder: type "folder", its name and colored poster;
 //                                       listed in Stremio's Library under the "Folder" type
 //   slib:<id>:info                      name holds {"d": description, "c": color, "o": order,
-//                                       "i": icon, "t": version (time of the last in-app edit)}
+//                                       "i": icon, "h": 1 when the name is left off the poster,
+//                                       "t": version (time of the last edit)}
 //   slib:<id>:title:<type>:<title id>   one per title in the folder, with its name and poster
-//   slib::settings                      name holds {"library": whether folders show in the
-//                                       Library, "t": version}
+//   slib::settings                      name holds {"library", "discover", "search": where in
+//                                       Stremio folders show, "t": version}
 // The info, title and settings items are marked removed, which keeps them off every Stremio
 // screen. Folders are hidden from the Library the same way. A deleted folder, or a title taken
 // out of a folder, keeps its item, with type "slibrary-removed".
@@ -28,21 +29,33 @@
 
   // Preset colors. Stremio shows catalog names as plain text, so the emoji is what marks
   // a folder's row on the Board and in Discover; the hex color is used for the artwork.
+  // There are only nine colored circle emoji, so the other colors use something of their color.
   const COLORS = {
     red: { label: 'Red', hex: '#e5484d', emoji: '🔴' },
+    wine: { label: 'Wine', hex: '#8e2140', emoji: '🍷' },
+    pink: { label: 'Pink', hex: '#e93d82', emoji: '🌸' },
+    peach: { label: 'Peach', hex: '#ff977d', emoji: '🍑' },
     orange: { label: 'Orange', hex: '#f76b15', emoji: '🟠' },
+    gold: { label: 'Gold', hex: '#c9a227', emoji: '⭐' },
     yellow: { label: 'Yellow', hex: '#ffc53d', emoji: '🟡' },
+    lime: { label: 'Lime', hex: '#8ec63f', emoji: '🍏' },
     green: { label: 'Green', hex: '#30a46c', emoji: '🟢' },
+    mint: { label: 'Mint', hex: '#3cc6a5', emoji: '🌿' },
+    sky: { label: 'Sky', hex: '#3fb6ef', emoji: '💧' },
     blue: { label: 'Blue', hex: '#3e63dd', emoji: '🔵' },
+    navy: { label: 'Navy', hex: '#273a7a', emoji: '🌌' },
     purple: { label: 'Purple', hex: '#8e4ec6', emoji: '🟣' },
     brown: { label: 'Brown', hex: '#a18072', emoji: '🟤' },
+    gray: { label: 'Gray', hex: '#9b9ca6', emoji: '🔘' },
     black: { label: 'Black', hex: '#2b2b33', emoji: '⚫' },
     white: { label: 'White', hex: '#ededf0', emoji: '⚪' }
   };
   const NO_COLOR = { label: 'None', hex: '#6e6a86', emoji: '📁' };
 
-  // Icons are drawn from icons/icons.json; "folder" is the default folder artwork.
+  // Icons are drawn from icons/icons.json; "folder" is the default folder artwork, and "none"
+  // leaves the poster without one.
   const DEFAULT_ICON = 'folder';
+  const NO_ICON = 'none';
   function cleanIcon(key) {
     return typeof key === 'string' && /^[a-z-]{1,30}$/.test(key) ? key : DEFAULT_ICON;
   }
@@ -104,15 +117,20 @@
     return Date.parse(value) || 0;
   }
 
-  // Whether folders also show in Stremio's Library (they do unless switched off).
+  // Where folders show in Stremio: its Library, Discover (and the Board, which shows the same
+  // rows), and search. Each is on unless switched off.
+  const SETTINGS = ['library', 'discover', 'search'];
+
   function readSettings(libraryItems) {
     for (const item of libraryItems) {
       if (item && item._id === SETTINGS_ID && item.type === RECORD_TYPE) {
-        const settings = parseInfo(item);
-        return { library: settings.library !== false, version: Number.isFinite(settings.t) ? settings.t : 0, stored: true };
+        const stored = parseInfo(item);
+        const settings = {};
+        SETTINGS.forEach((key) => { settings[key] = stored[key] !== false; });
+        return Object.assign(settings, { version: Number.isFinite(stored.t) ? stored.t : 0, stored: true });
       }
     }
-    return { library: true, version: 0, stored: false };
+    return { library: true, discover: true, search: true, version: 0, stored: false };
   }
 
   // Reads the folders (not deleted ones) out of a user's library items. Other items are ignored.
@@ -145,6 +163,7 @@
         color: isColor(info.c) ? info.c : colorFromPoster(item.poster),
         order: Number.isFinite(info.o) ? info.o : 0,
         icon: cleanIcon(info.i),
+        showName: info.h !== 1,
         version: Number.isFinite(info.t) ? info.t : 0,
         items: cleanItems(titleList)
       };
@@ -162,6 +181,10 @@
     if (title) query.push('name=' + encodeURIComponent(title));
     if (cleanIcon(icon) !== DEFAULT_ICON) query.push('icon=' + cleanIcon(icon));
     return baseUrl + '/img/poster/' + (isColor(color) ? color : 'none') + '.png' + (query.length ? '?' + query.join('&') : '');
+  }
+
+  function folderPoster(baseUrl, folder) {
+    return posterUrl(baseUrl, folder.color, folder.showName === false ? '' : folder.name, folder.icon);
   }
 
   function backgroundUrl(baseUrl, color) {
@@ -212,13 +235,15 @@
     const name = cleanText(folder.name, LIMITS.name) || 'Untitled folder';
     const icon = cleanIcon(folder.icon);
     const { library } = readSettings(previous.values());
-    write(prefix, { name, type: TYPE, poster: posterUrl(options.baseUrl, color, name, icon), removed: !library });
+    const poster = folderPoster(options.baseUrl, { color, name, icon, showName: folder.showName });
+    write(prefix, { name, type: TYPE, poster, removed: !library });
     const info = {
       d: cleanText(folder.description, LIMITS.description),
       c: color,
       o: Number.isFinite(folder.order) ? folder.order : 0
     };
     if (icon !== DEFAULT_ICON) info.i = icon;
+    if (folder.showName === false) info.h = 1;
     if (folder.version) info.t = folder.version;
     write(prefix + ':info', {
       name: JSON.stringify(info),
@@ -250,26 +275,29 @@
     return [libraryItem(id, { type: REMOVED_RECORD_TYPE, removed: true }, options.previous.get(id), now)];
   }
 
-  // The library items to write to show folders in Stremio's Library (`show`) or hide them.
-  function settingsItems(show, options) {
+  // The library items to write to change where folders show: `update` holds the settings that
+  // change, e.g. { library: false }.
+  function settingsItems(update, options) {
     const nowMs = (options.now || new Date()).getTime();
     const now = new Date(nowMs).toISOString();
     const previous = options.previous;
     const current = readSettings(previous.values());
-    if (current.library === show && current.stored) return [];
+    const next = {};
+    SETTINGS.forEach((key) => { next[key] = typeof update[key] === 'boolean' ? update[key] : current[key]; });
+    if (current.stored && SETTINGS.every((key) => next[key] === current[key])) return [];
     const changes = [];
-    if (current.library !== show) {
+    if (current.library !== next.library) {
       previous.forEach((item, id) => {
         const ref = parseId(id);
         if (!ref || ref.kind !== 'folder' || item.type !== TYPE) return;
         // Folders removed from the Library while they were shown there were deleted: mark them
         // so, before every folder gets removed from the Library to hide it.
         if (current.library && item.removed) changes.push(libraryItem(id, { type: REMOVED_RECORD_TYPE }, item, now));
-        else if (item.removed === show) changes.push(libraryItem(id, { removed: !show }, item, now));
+        else if (item.removed === next.library) changes.push(libraryItem(id, { removed: !next.library }, item, now));
       });
     }
     changes.push(libraryItem(SETTINGS_ID, {
-      name: JSON.stringify({ library: show, t: nowMs }),
+      name: JSON.stringify(Object.assign(next, { t: nowMs })),
       type: RECORD_TYPE,
       removed: true
     }, previous.get(SETTINGS_ID), now));
@@ -298,6 +326,7 @@
     COLORS,
     NO_COLOR,
     DEFAULT_ICON,
+    NO_ICON,
     cleanIcon,
     isColor,
     colorOf,
@@ -306,6 +335,7 @@
     readSettings,
     sortFolders,
     posterUrl,
+    folderPoster,
     backgroundUrl,
     toLibraryItems,
     deletionItems,

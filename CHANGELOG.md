@@ -2,6 +2,15 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.5.0 — 2026-10-26
+
+- New switches on the configure page: show folders in Discover (and on the Board), and show folders in search.
+- Choose whether a folder's name is written on its poster. The name itself is still required.
+- "No icon" option, nine more colors (wine, pink, peach, gold, lime, mint, sky, navy, gray) and 56 more icons.
+- The color and icon lists stay folded away until you press "+", and the editor shows a live preview of the poster.
+- The Delete, Cancel and Save buttons always stay at the bottom of the screen.
+- New "Recommended" tab under "Add titles": popular movies and shows in the same genres as the titles in the folder.
+
 ## 1.4.0 — 2026-10-26
 
 - Edit folders without leaving Stremio: a folder's page has links to rename it, describe it, change its color or icon, move it and delete it.

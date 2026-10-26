@@ -7,7 +7,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
-const { ID_PREFIX, TYPE, LIMITS, COLORS, colorOf, posterUrl, backgroundUrl } = require('./shared');
+const { ID_PREFIX, TYPE, LIMITS, COLORS, NO_ICON, colorOf, posterUrl, folderPoster, backgroundUrl } = require('./shared');
 const { ICONS } = require('./images');
 const { version } = require('../package.json');
 
@@ -19,18 +19,25 @@ const ACTION_PREFIX = `${ID_PREFIX}do:`;
 // Titles whose stream list gets S-library's "add to folder" entries.
 const TITLE_TYPES = ['movie', 'series', 'anime'];
 
-// `folders` is null when the addon has not been configured yet.
-function manifest(folders, ctx) {
-  const catalogs = folders
+// `library` ({ folders, settings }) is null when the addon has not been configured yet.
+function manifest(library, ctx) {
+  const rows = library && library.settings.discover
     ? [
         { type: TYPE, id: ALL_FOLDERS_CATALOG, name: '📁 S-library', extra: [{ name: 'skip' }] },
-        ...folders.map((folder) => ({
+        ...library.folders.map((folder) => ({
           type: TYPE,
           id: FOLDER_CATALOG_PREFIX + folder.id,
           name: `${colorOf(folder.color).emoji} ${folder.name}`,
           extra: [{ name: 'skip' }]
-        })),
-        // Searching in Stremio finds folders and offers to create one.
+        }))
+      ]
+    : [];
+  const catalogs = library
+    ? [
+        // The Board and Discover show these rows.
+        ...rows,
+        // Searching in Stremio finds folders and offers to create one. It also does the "new
+        // folder:", "rename" and "describe" searches, so it stays when folders are left out of search.
         { type: TYPE, id: SEARCH_CATALOG, name: 'S-library', extra: [{ name: 'search', isRequired: true }] }
       ]
     : [];
@@ -49,7 +56,7 @@ function manifest(folders, ctx) {
       { name: 'stream', types: [TYPE, ...TITLE_TYPES] }
     ],
     catalogs,
-    behaviorHints: { configurable: true, configurationRequired: !folders }
+    behaviorHints: { configurable: true, configurationRequired: !library }
   };
 }
 
@@ -118,7 +125,7 @@ function folderPreview(folder, ctx) {
     id: ID_PREFIX + folder.id,
     type: TYPE,
     name: folder.name,
-    poster: posterUrl(ctx.baseUrl, folder.color, folder.name, folder.icon),
+    poster: folderPoster(ctx.baseUrl, folder),
     posterShape: 'poster',
     background: backgroundUrl(ctx.baseUrl, folder.color),
     description: folder.description,
@@ -127,8 +134,9 @@ function folderPreview(folder, ctx) {
 }
 
 // Search: "new folder: <name>", "rename <folder>: <name>" and "describe <folder>: <text>" give a
-// card that does it; anything else finds folders by name and offers a new folder with that name.
-function search(folders, query, ctx) {
+// card that does it; anything else finds folders by name and offers a new folder with that name,
+// unless folders are left out of search.
+function search({ folders, settings }, query, ctx) {
   const text = query.trim().replace(/\s+/g, ' ');
   const lower = text.toLowerCase();
   const card = (id, name, description, poster) => ({ id, type: TYPE, name, description, poster, posterShape: 'poster' });
@@ -158,7 +166,7 @@ function search(folders, query, ctx) {
         actionId('rename', folder.id, folder.version, encodeText(name)),
         `Rename to "${name}"`,
         `Open to rename "${folder.name}" to "${name}".`,
-        posterUrl(ctx.baseUrl, folder.color, name, folder.icon)
+        folderPoster(ctx.baseUrl, { ...folder, name })
       )];
     }
     if (!value) return [hint('describe', 'Type the description', `Type the description after "describe ${folder.name}:".`)];
@@ -166,7 +174,7 @@ function search(folders, query, ctx) {
       actionId('describe', folder.id, folder.version, encodeText(value.slice(0, LIMITS.description))),
       `Set the description of "${folder.name}"`,
       `Open to save this description: ${value}`,
-      posterUrl(ctx.baseUrl, folder.color, folder.name, folder.icon)
+      folderPoster(ctx.baseUrl, folder)
     )];
   }
 
@@ -175,17 +183,18 @@ function search(folders, query, ctx) {
     const name = newFolder[1].slice(0, LIMITS.name);
     return [name ? create(name) : hint('new', 'Type the folder name', 'Type the name after "new folder:".')];
   }
-  if (!text) return [];
+  if (!text || !settings.search) return [];
   const matches = folders.filter((folder) => folder.name.toLowerCase().includes(lower)).map((folder) => folderPreview(folder, ctx));
   return matches.concat(create(text.slice(0, LIMITS.name)));
 }
 
-function catalog(folders, id, extra, ctx) {
+function catalog(library, id, extra, ctx) {
+  const { folders } = library;
   let metas = [];
   if (id === ALL_FOLDERS_CATALOG) {
     metas = folders.map((folder) => folderPreview(folder, ctx));
   } else if (id === SEARCH_CATALOG) {
-    metas = search(folders, extra.search || '', ctx);
+    metas = search(library, extra.search || '', ctx);
   } else if (id.startsWith(FOLDER_CATALOG_PREFIX)) {
     const folder = folders.find((f) => f.id === id.slice(FOLDER_CATALOG_PREFIX.length));
     if (folder) {
@@ -229,7 +238,10 @@ function folderMeta(folder, { folders, settings }, ctx) {
   return {
     ...folderPreview(folder, ctx),
     links: [
-      link('Folder', 'Open as a grid', `stremio:///discover/${encodeURIComponent(ctx.manifestUrl)}/${TYPE}/${FOLDER_CATALOG_PREFIX}${folder.id}`),
+      // The grid is the folder's row in Discover.
+      ...(settings.discover
+        ? [link('Folder', 'Open as a grid', `stremio:///discover/${encodeURIComponent(ctx.manifestUrl)}/${TYPE}/${FOLDER_CATALOG_PREFIX}${folder.id}`)]
+        : []),
       link('Folder', 'Rename', searchLink(`rename ${folder.name}: `)),
       link('Folder', 'Description', searchLink(`describe ${folder.name}: `)),
       ...(index > 0 ? [link('Folder', 'Move up', edit('up'))] : []),
@@ -239,7 +251,8 @@ function folderMeta(folder, { folders, settings }, ctx) {
         const { emoji, label } = colorOf(key);
         return link('Color', `${key === color ? '✓ ' : ''}${emoji} ${label}`, edit('color', key));
       }),
-      ...Object.entries(ICONS).map(([key, icon]) => link('Icon', `${key === folder.icon ? '✓ ' : ''}${icon.label}`, edit('icon', key))),
+      ...[[NO_ICON, { label: 'No icon' }], ...Object.entries(ICONS)].map(([key, icon]) =>
+        link('Icon', `${key === folder.icon ? '✓ ' : ''}${icon.label}`, edit('icon', key))),
       ...folder.items.map((item) => link('In this folder', item.name, detailLink(item.type, item.id))),
       ...generalLinks(settings, ctx, `${ctx.configureUrl}#folder=${folder.id}`)
     ],

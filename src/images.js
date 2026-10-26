@@ -5,7 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { isColor, colorOf, LIMITS, DEFAULT_ICON } = require('./shared');
+const { isColor, colorOf, LIMITS, DEFAULT_ICON, NO_ICON } = require('./shared');
 const { loadFont, measure } = require('./font');
 const { createRaster } = require('./raster');
 
@@ -191,16 +191,19 @@ function poster(rgb, name, icon) {
   const title = Array.from(name || '').filter((char) => char === ' ' || font.glyph(char)).join('').replace(/\s+/g, ' ').trim();
 
   // The artwork (folder or icon) above the name, the pair centred on the poster.
-  const artHeight = title ? 92 : 140;
-  const layout = title ? layoutTitle(title, 256, 3) : null;
+  const art = icon !== NO_ICON;
+  const artHeight = art ? (title ? 92 : 140) : 0;
+  const layout = title ? layoutTitle(title, 256, art ? 3 : 5) : null;
   const capHeight = layout ? (font.capHeight * layout.size) / font.unitsPerEm : 0;
   const lineHeight = layout ? layout.size * 1.15 : 0;
-  const gap = layout ? 30 : 0;
+  const gap = layout && art ? 30 : 0;
   const top = (height - (artHeight + gap + (layout ? capHeight + (layout.lines.length - 1) * lineHeight : 0))) / 2;
 
   let shapes = [];
   const layers = [];
-  if (icon !== DEFAULT_ICON && ICONS[icon]) {
+  if (!art) {
+    // Just the name.
+  } else if (icon !== DEFAULT_ICON && ICONS[icon]) {
     // Icons fill 224 of their 256 units.
     const box = artHeight / 0.875;
     const raster = createRaster(width, height);
@@ -250,7 +253,7 @@ const CACHE_MAX = 300;
 function image(kind, color, name = '', icon = DEFAULT_ICON) {
   if (kind !== 'logo' && color !== 'none' && !isColor(color)) return null;
   const title = kind === 'poster' ? String(name).slice(0, LIMITS.name) : '';
-  const art = kind === 'poster' && Object.prototype.hasOwnProperty.call(ICONS, icon) ? icon : DEFAULT_ICON;
+  const art = kind === 'poster' && (icon === NO_ICON || Object.prototype.hasOwnProperty.call(ICONS, icon)) ? icon : DEFAULT_ICON;
   const key = `${kind}:${color}:${art}:${title}`;
   let png = cache.get(key);
   if (png) cache.delete(key);
