@@ -47,7 +47,7 @@ Stremio Web (and any Stremio app that talks to addons the way a browser does) op
 
 Changes to the folder rows on the Board reach Stremio the next time you open it or switch back to its window. There's no need to install the addon again.
 
-The version the server runs is shown next to the title on the configure page, with a short note on what changed. The notes open by themselves the first time you see a new version.
+The version the server runs is shown next to the title on the configure page, with a one-line note on what changed. Tap it for all the release notes.
 
 Stremio's own **Remove from library** button on a folder's page only takes that folder out of the Library: the folder and its titles stay, on the Board, in Discover and in search, and **Add to library** on its page puts it back. Only **Delete** deletes a folder, and it asks first. (Up to version 1.5, Stremio's button deleted the folder; folders deleted that way stay deleted.)
 

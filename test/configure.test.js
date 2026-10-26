@@ -56,10 +56,12 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   const stored = () => S.fromLibraryItems([...api.library.values()]);
 
   await page.goto(`${base}/configure`);
-  // The running version, with what changed in it opened on a first visit.
+  // The running version, and what changed in it, closed until asked for.
   const { version } = require('../package.json');
   await page.waitForSelector('#version:not([hidden])');
   assert.equal(await page.textContent('#version'), `v${version}`);
+  assert.equal(await page.getAttribute('#whats-new', 'open'), null);
+  await page.click('#whats-new summary');
   assert.equal(await page.getAttribute('#whats-new', 'open'), '');
   assert.match(await page.textContent('#whats-new-label'), new RegExp(`v${version.replace(/\./g, '\\.')}`));
   assert.ok((await page.locator('.release').count()) >= 1);

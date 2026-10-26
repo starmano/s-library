@@ -51,6 +51,7 @@
   .whats-new-label { color: var(--text); font-weight: 700; white-space: nowrap; }
   #whats-new-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .whats-new[open] #whats-new-summary { display: none; }
+  #whats-new-list { max-height: 50vh; overflow-y: auto; }
   .release h3 { display: flex; align-items: center; gap: 8px; margin: 14px 0 4px; font-size: 14px; color: var(--text); }
   .release ul { margin: 0; padding-left: 20px; color: var(--muted); }
   .release-date { font-weight: 400; color: var(--muted); }
@@ -1038,8 +1039,8 @@
 
   // ---- Version ----
 
-  // Shows which version this server runs and what changed. The notes open by themselves the
-  // first time this browser sees a new version.
+  // Shows which version this server runs and what changed. The notes start closed, with the
+  // latest change on their one line.
   fetch('/version.json')
     .then((res) => res.json())
     .then(({ version, changes }) => {
@@ -1057,14 +1058,7 @@
           entry.version === version ? h('span', { class: 'running' }, 'running') : null),
         h('ul', null, entry.changes.map((change) => h('li', null, change)))
       )));
-      const panel = $('#whats-new');
-      panel.hidden = false;
-      try {
-        if (localStorage.getItem('slibrary-version') !== version) panel.open = true;
-        localStorage.setItem('slibrary-version', version);
-      } catch (_) {
-        // Private browsing: just leave the notes closed.
-      }
+      $('#whats-new').hidden = false;
     })
     .catch(() => {});
 
