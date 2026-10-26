@@ -2,6 +2,13 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.3.0 — 2026-10-26
+
+- Add movies and shows to folders inside Stremio: open a title and pick a folder in its list of streams, or start a new folder with it.
+- Folder pages in Stremio have "Edit this folder" and "New folder" links, which open the editor straight away.
+- Choose an icon for each folder: romance, war, thriller, sci-fi, western, action, spy, gangster and 30 more.
+- Titles in a folder's list can be taken out of the folder from Stremio.
+
 ## 1.2.0 — 2026-10-26
 
 - Folder posters show the folder's name, so folders are easy to tell apart.

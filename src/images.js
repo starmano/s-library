@@ -5,10 +5,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { isColor, colorOf, LIMITS } = require('./shared');
-const { loadFont, measure, createRaster } = require('./font');
+const { isColor, colorOf, LIMITS, DEFAULT_ICON } = require('./shared');
+const { loadFont, measure } = require('./font');
+const { createRaster } = require('./raster');
 
 const font = loadFont(fs.readFileSync(path.join(__dirname, '..', 'fonts', 'PlusJakartaSans-ExtraBold.ttf')));
+// Folder icons (Phosphor, 256-unit SVG paths), keyed by the names stored with each folder.
+const ICONS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'icons', 'icons.json'), 'utf8'));
 
 const CRC_TABLE = new Int32Array(256).map((_, n) => {
   let c = n;
@@ -81,9 +84,14 @@ function roundedRect(px, py, [x0, y0, x1, y1, r]) {
   return Math.min(1, Math.max(0, 0.5 - distance));
 }
 
+// The color artwork is drawn in: a darker or lighter shade of the background.
+function inkOf(rgb) {
+  return isLight(rgb) ? mix(rgb, BLACK, 0.45) : mix(rgb, WHITE, 0.75);
+}
+
 // A folder icon in a 100x100 box: back panel with tab, a sheet of paper, front panel.
 function folderShapes(rgb, box) {
-  const ink = isLight(rgb) ? mix(rgb, BLACK, 0.45) : mix(rgb, WHITE, 0.75);
+  const ink = inkOf(rgb);
   const at = ([x0, y0, x1, y1, r]) => [
     box.x + (x0 * box.size) / 100,
     box.y + (y0 * box.size) / 100,
@@ -175,36 +183,48 @@ function layoutTitle(name, maxWidth, maxLines) {
   return { size, lines };
 }
 
-function poster(rgb, name) {
+function poster(rgb, name, icon) {
   const width = 300;
   const height = 450;
   const backdrop = (u, v) => mix(mix(rgb, WHITE, 0.12), mix(rgb, BLACK, 0.55), v * 0.8 + u * 0.2);
   // Keep only characters the font can draw.
   const title = Array.from(name || '').filter((char) => char === ' ' || font.glyph(char)).join('').replace(/\s+/g, ' ').trim();
-  if (!title) return draw(width, height, { background: backdrop, shapes: folderShapes(rgb, { x: 50, y: 125, size: 200 }) });
 
-  // Icon above the name, the pair centred on the poster.
-  const { size, lines } = layoutTitle(title, 256, 3);
-  const capHeight = (font.capHeight * size) / font.unitsPerEm;
-  const lineHeight = size * 1.15;
-  const icon = 130;
-  const gap = 30;
-  const top = (height - (icon * 0.68 + gap + capHeight + (lines.length - 1) * lineHeight)) / 2;
-  const raster = createRaster(width, height);
-  lines.forEach((line, i) => {
-    const x = (width - measure(font, line, size)) / 2;
-    raster.text(font, line, x, top + icon * 0.68 + gap + capHeight + i * lineHeight, size);
-  });
-  const coverage = raster.coverage();
-  const light = isLight(rgb);
-  return draw(width, height, {
-    background: backdrop,
-    shapes: folderShapes(rgb, { x: (width - icon) / 2, y: top - icon * 0.16, size: icon }),
-    layers: [
+  // The artwork (folder or icon) above the name, the pair centred on the poster.
+  const artHeight = title ? 92 : 140;
+  const layout = title ? layoutTitle(title, 256, 3) : null;
+  const capHeight = layout ? (font.capHeight * layout.size) / font.unitsPerEm : 0;
+  const lineHeight = layout ? layout.size * 1.15 : 0;
+  const gap = layout ? 30 : 0;
+  const top = (height - (artHeight + gap + (layout ? capHeight + (layout.lines.length - 1) * lineHeight : 0))) / 2;
+
+  let shapes = [];
+  const layers = [];
+  if (icon !== DEFAULT_ICON && ICONS[icon]) {
+    // Icons fill 224 of their 256 units.
+    const box = artHeight / 0.875;
+    const raster = createRaster(width, height);
+    raster.path(ICONS[icon].path, (width - box) / 2, top - box * 0.0625, box / 256);
+    layers.push({ coverage: raster.coverage(), rgb: inkOf(rgb), alpha: 1 });
+  } else {
+    // The folder fills 68% of its box's height.
+    const box = artHeight / 0.68;
+    shapes = folderShapes(rgb, { x: (width - box) / 2, y: top - box * 0.16, size: box });
+  }
+  if (layout) {
+    const raster = createRaster(width, height);
+    layout.lines.forEach((line, i) => {
+      const x = (width - measure(font, line, layout.size)) / 2;
+      raster.text(font, line, x, top + artHeight + gap + capHeight + i * lineHeight, layout.size);
+    });
+    const coverage = raster.coverage();
+    const light = isLight(rgb);
+    layers.push(
       { coverage, rgb: BLACK, alpha: light ? 0 : 0.25, shift: 2 },
       { coverage, rgb: light ? mix(rgb, BLACK, 0.8) : WHITE, alpha: 1 }
-    ]
-  });
+    );
+  }
+  return draw(width, height, { background: backdrop, shapes, layers });
 }
 
 function background(rgb) {
@@ -227,18 +247,19 @@ function logo() {
 const cache = new Map();
 const CACHE_MAX = 300;
 
-function image(kind, color, name = '') {
+function image(kind, color, name = '', icon = DEFAULT_ICON) {
   if (kind !== 'logo' && color !== 'none' && !isColor(color)) return null;
   const title = kind === 'poster' ? String(name).slice(0, LIMITS.name) : '';
-  const key = `${kind}:${color}:${title}`;
+  const art = kind === 'poster' && Object.prototype.hasOwnProperty.call(ICONS, icon) ? icon : DEFAULT_ICON;
+  const key = `${kind}:${color}:${art}:${title}`;
   let png = cache.get(key);
   if (png) cache.delete(key);
   else if (kind === 'logo') png = logo();
-  else if (kind === 'poster') png = poster(hexToRgb(colorOf(color).hex), title);
+  else if (kind === 'poster') png = poster(hexToRgb(colorOf(color).hex), title, art);
   else png = background(hexToRgb(colorOf(color).hex));
   cache.set(key, png);
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
   return png;
 }
 
-module.exports = { image, encodePng, crc32 };
+module.exports = { image, encodePng, crc32, ICONS };

@@ -5,7 +5,7 @@
 // own item, built from those fields alone:
 //   slib:<id>                           the folder: type "folder", its name and colored poster;
 //                                       listed in Stremio's Library under the "Folder" type
-//   slib:<id>:info                      name holds {"d": description, "c": color, "o": order}
+//   slib:<id>:info                      name holds {"d": description, "c": color, "o": order, "i": icon}
 //   slib:<id>:title:<type>:<title id>   one per title in the folder, with its name and poster
 // The info and title items are marked removed, which keeps them off every Stremio screen.
 // A title taken out of a folder keeps its item, with type "slibrary-removed".
@@ -35,6 +35,12 @@
     white: { label: 'White', hex: '#ededf0', emoji: '⚪' }
   };
   const NO_COLOR = { label: 'None', hex: '#6e6a86', emoji: '📁' };
+
+  // Icons are drawn from icons/icons.json; "folder" is the default folder artwork.
+  const DEFAULT_ICON = 'folder';
+  function cleanIcon(key) {
+    return typeof key === 'string' && /^[a-z-]{1,30}$/.test(key) ? key : DEFAULT_ICON;
+  }
 
   function isColor(key) {
     return typeof key === 'string' && Object.prototype.hasOwnProperty.call(COLORS, key);
@@ -117,6 +123,7 @@
         description: cleanText(info.d, LIMITS.description),
         color: isColor(info.c) ? info.c : colorFromPoster(item.poster),
         order: Number.isFinite(info.o) ? info.o : 0,
+        icon: cleanIcon(info.i),
         items: cleanItems(items)
       };
     }));
@@ -126,10 +133,13 @@
     return folders.slice().sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
   }
 
-  // The poster shows the folder's name, so the name is part of its address.
-  function posterUrl(baseUrl, color, name) {
+  // The poster shows the folder's name and icon, so both are part of its address.
+  function posterUrl(baseUrl, color, name, icon) {
+    const query = [];
     const title = cleanText(name, LIMITS.name);
-    return baseUrl + '/img/poster/' + (isColor(color) ? color : 'none') + '.png' + (title ? '?name=' + encodeURIComponent(title) : '');
+    if (title) query.push('name=' + encodeURIComponent(title));
+    if (cleanIcon(icon) !== DEFAULT_ICON) query.push('icon=' + cleanIcon(icon));
+    return baseUrl + '/img/poster/' + (isColor(color) ? color : 'none') + '.png' + (query.length ? '?' + query.join('&') : '');
   }
 
   function backgroundUrl(baseUrl, color) {
@@ -178,13 +188,16 @@
     };
 
     const name = cleanText(folder.name, LIMITS.name) || 'Untitled folder';
-    write(prefix, { name, type: TYPE, poster: posterUrl(options.baseUrl, color, name), removed: false });
+    const icon = cleanIcon(folder.icon);
+    write(prefix, { name, type: TYPE, poster: posterUrl(options.baseUrl, color, name, icon), removed: false });
+    const info = {
+      d: cleanText(folder.description, LIMITS.description),
+      c: color,
+      o: Number.isFinite(folder.order) ? folder.order : 0
+    };
+    if (icon !== DEFAULT_ICON) info.i = icon;
     write(prefix + ':info', {
-      name: JSON.stringify({
-        d: cleanText(folder.description, LIMITS.description),
-        c: color,
-        o: Number.isFinite(folder.order) ? folder.order : 0
-      }),
+      name: JSON.stringify(info),
       type: RECORD_TYPE,
       removed: true
     });
@@ -234,6 +247,8 @@
     LIMITS,
     COLORS,
     NO_COLOR,
+    DEFAULT_ICON,
+    cleanIcon,
     isColor,
     colorOf,
     cleanItems,

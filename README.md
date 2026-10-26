@@ -20,10 +20,18 @@ Colors: 🔴 red, 🟠 orange, 🟡 yellow, 🟢 green, 🔵 blue, 🟣 purple, 
 
 1. Open the addon's configure page (`https://<your-host>/configure`) and sign in with your Stremio account.
    Signed up with Facebook, Google or Apple? Use the auth key option on the same page instead.
-2. Create folders: pick a name, add a description and a color if you like, and add titles from your library or from a Stremio search.
+2. Create folders: pick a name, and if you like a description, a color and an icon. Add titles from your library or from a Stremio search.
 3. Click **Install in Stremio** (or **Install in Stremio Web**). You only need to install once.
 
-To change folders later, use **Configure** on S-library in Stremio's addon list, or open the configure page again. Changes reach Stremio the next time you open it or switch back to its window.
+### Inside Stremio
+
+Stremio doesn't let addons add buttons, so S-library works through lists Stremio already shows:
+
+- **Add a title to a folder:** open a movie or show. Its list of streams shows your folders: tap one to add the title, or tap a folder marked "✓ In this folder" to take it out. A short confirmation page opens; press back to return to Stremio. The list also has **New folder with this title**.
+- **Edit or create folders:** a folder's page has **Edit this folder** and **New folder** links, which open the editor already signed in. **Configure** on S-library in Stremio's addon list opens it too.
+- **Take a title out of a folder:** on the folder's page, pick the title and choose **Take it out**.
+
+Changes reach Stremio the next time you open it or switch back to its window. There's no need to install the addon again.
 
 The version the server runs is shown next to the title on the configure page, with a short note on what changed. The notes open by themselves the first time you see a new version.
 
@@ -106,9 +114,10 @@ The addon then reads those items through the Stremio API and serves:
 
 - **catalogs**: `📁 S-library` (all folders) and one catalog per folder,
 - **meta** for `slib:` ids: the folder page, with links to its titles,
-- **stream** for a folder's title list: one entry that opens the selected title.
+- **stream** for every movie and show: one entry per folder, to add the title or take it out, plus **New folder with this title**. Each entry opens `/<config>/act/add|remove/<folder>/<type>/<id>`, which makes the change through the Stremio API and shows a confirmation page. A title's name and poster come from your library, or from Cinemeta.
+- **stream** for a folder's title list: open the title, or take it out of the folder.
 
-Folder posters (with the folder's name), backgrounds and the logo are PNGs drawn by the addon itself and cached in memory. Names are written in Plus Jakarta Sans, the font Stremio's own interface uses, which is bundled in `fonts/` under the SIL Open Font License (`fonts/OFL.txt`).
+Folder posters (with the folder's name and icon), backgrounds and the logo are PNGs drawn by the addon itself and cached in memory. Names are written in Plus Jakarta Sans, the font Stremio's own interface uses, which is bundled in `fonts/` under the SIL Open Font License (`fonts/OFL.txt`). Icons are a selection of [Phosphor Icons](https://phosphoricons.com) (fill style, MIT license, `icons/LICENSE`).
 
 Stremio keeps its own copy of each installed addon's manifest, and Board rows come from that copy. So after every change the configure page also refreshes the manifest stored for S-library in your addon list. Other addons in the list are left as they are.
 
@@ -122,8 +131,10 @@ Stremio keeps its own copy of each installed addon's manifest, and Board rows co
 | `src/shared.js` | Folder model and colors, shared by the server and the configure page |
 | `src/stremio-api.js` | Stremio API client, with a 15-second cache of each account's folders |
 | `src/images.js` | Folder poster, background and logo PNGs |
-| `src/font.js` | Reads the bundled font and draws text for the posters |
+| `src/font.js` | Reads the bundled font |
+| `src/raster.js` | Draws text and icons (SVG paths) with smooth edges |
 | `fonts/` | Plus Jakarta Sans ExtraBold (Latin letters only) and its license |
+| `icons/` | The folder icons (SVG path data) and their license |
 | `public/configure.html` | Configure page (HTML, CSS and JavaScript in one file) |
 | `CHANGELOG.md` | What changed in each version, shown on the configure page |
 

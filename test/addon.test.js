@@ -7,7 +7,8 @@ const addon = require('../src/addon');
 const ctx = {
   baseUrl: 'https://addon.test',
   manifestUrl: 'https://addon.test/cfg/manifest.json',
-  configureUrl: 'https://addon.test/cfg/configure'
+  configureUrl: 'https://addon.test/cfg/configure',
+  actionUrl: 'https://addon.test/cfg/act'
 };
 
 const folders = [
@@ -35,8 +36,13 @@ test('unconfigured manifest asks to be configured', () => {
 test('configured manifest has one catalog per folder, marked with its color', () => {
   const manifest = addon.manifest(folders, ctx);
   assert.equal(manifest.behaviorHints.configurationRequired, false);
-  assert.deepEqual(manifest.types, ['folder']);
-  assert.deepEqual(manifest.idPrefixes, ['slib:']);
+  assert.deepEqual(manifest.types, ['folder', 'movie', 'series', 'anime']);
+  assert.equal(manifest.idPrefixes, undefined, 'a manifest-wide prefix would hide movies from the stream resource');
+  assert.deepEqual(manifest.resources, [
+    'catalog',
+    { name: 'meta', types: ['folder'], idPrefixes: ['slib:'] },
+    { name: 'stream', types: ['folder', 'movie', 'series', 'anime'] }
+  ]);
   assert.deepEqual(
     manifest.catalogs.map((c) => [c.id, c.name]),
     [
@@ -84,16 +90,38 @@ test('folder meta has description and links to its titles', () => {
     category: 'S-library',
     url: `stremio:///discover/${encodeURIComponent(ctx.manifestUrl)}/folder/slib.fav`
   });
-  assert.deepEqual(meta.links[1], { name: 'Edit folders', category: 'S-library', url: ctx.configureUrl });
-  assert.deepEqual(meta.links.slice(2).map((l) => l.url), ['stremio:///detail/movie/tt0133093', 'stremio:///detail/series/kitsu%3A1']);
+  assert.deepEqual(meta.links[1], { name: 'Edit this folder', category: 'S-library', url: `${ctx.configureUrl}#folder=fav` });
+  assert.deepEqual(meta.links[2], { name: 'New folder', category: 'S-library', url: `${ctx.configureUrl}#new` });
+  assert.deepEqual(meta.links.slice(3).map((l) => l.url), ['stremio:///detail/movie/tt0133093', 'stremio:///detail/series/kitsu%3A1']);
   assert.deepEqual(meta.videos.map((v) => v.id), ['slib:fav:movie:tt0133093', 'slib:fav:series:kitsu:1']);
   assert.equal(addon.meta(folders, 'slib:missing', ctx), null);
 });
 
-test('a folder video offers one stream that opens the title', () => {
-  assert.deepEqual(addon.stream(folders, 'slib:fav:series:kitsu:1').streams, [
-    { name: '📁 S-library', description: 'Open "Cowboy Bebop"', externalUrl: 'stremio:///detail/series/kitsu%3A1' }
+test("a title's stream list offers every folder, and a new one", () => {
+  assert.deepEqual(addon.stream(folders, 'movie', 'tt0133093', ctx).streams, [
+    { name: '🔴 Favorites', description: '✓ In this folder · tap to take it out', externalUrl: 'https://addon.test/cfg/act/remove/fav/movie/tt0133093' },
+    { name: '📁 Watch later', description: '＋ Add to this folder', externalUrl: 'https://addon.test/cfg/act/add/later/movie/tt0133093' },
+    { name: '📁 S-library', description: '＋ New folder with this title', externalUrl: 'https://addon.test/cfg/configure#new=movie%3Att0133093' }
   ]);
-  assert.deepEqual(addon.stream(folders, 'slib:fav').streams, []);
-  assert.deepEqual(addon.stream(folders, 'tt0133093').streams, []);
+  // Episodes act on their show.
+  const episode = addon.stream(folders, 'series', 'kitsu:1:5', ctx).streams;
+  assert.equal(episode[0].externalUrl, 'https://addon.test/cfg/act/remove/fav/series/kitsu%3A1');
+  assert.equal(addon.stream([], 'series', 'tt0944947:1:1', ctx).streams[0].externalUrl, 'https://addon.test/cfg/configure#new=series%3Att0944947');
+});
+
+test('a title in a folder can be opened or taken out from the folder page', () => {
+  assert.deepEqual(addon.stream(folders, 'folder', 'slib:fav:series:kitsu:1', ctx).streams, [
+    { name: '📁 S-library', description: 'Open "Cowboy Bebop"', externalUrl: 'stremio:///detail/series/kitsu%3A1' },
+    { name: '📁 S-library', description: '✕ Take it out of "Favorites"', externalUrl: 'https://addon.test/cfg/act/remove/fav/series/kitsu%3A1' }
+  ]);
+  // An empty folder's page explains how to fill it.
+  assert.match(addon.stream(folders, 'folder', 'slib:later', ctx).streams[0].description, /folder is empty/);
+  assert.deepEqual(addon.stream(folders, 'folder', 'slib:missing', ctx).streams, []);
+});
+
+test('episode ids map to their show', () => {
+  assert.equal(addon.titleOf('tt0944947:1:1'), 'tt0944947');
+  assert.equal(addon.titleOf('tt0133093'), 'tt0133093');
+  assert.equal(addon.titleOf('kitsu:123:4'), 'kitsu:123');
+  assert.equal(addon.titleOf('kitsu:123'), 'kitsu:123');
 });

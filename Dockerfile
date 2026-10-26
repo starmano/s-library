@@ -4,6 +4,7 @@ COPY package.json app.js CHANGELOG.md ./
 COPY src ./src
 COPY public ./public
 COPY fonts ./fonts
+COPY icons ./icons
 ENV PORT=7000
 EXPOSE 7000
 USER node

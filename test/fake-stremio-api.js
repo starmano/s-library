@@ -1,4 +1,4 @@
-// In-memory stand-in for api.strem.io, covering the calls S-library makes.
+// In-memory stand-in for api.strem.io (and Cinemeta's meta lookups), covering the calls S-library makes.
 'use strict';
 
 const http = require('node:http');
@@ -15,7 +15,7 @@ function keepStremioFields(item) {
   return { ...pick(item, ITEM_FIELDS), behaviorHints: pick(item.behaviorHints, HINT_FIELDS) };
 }
 
-function startFakeApi({ email = 'me@example.com', password = 'secret', authKey = 'test-auth-key', items = [], addons = [] } = {}) {
+function startFakeApi({ email = 'me@example.com', password = 'secret', authKey = 'test-auth-key', items = [], addons = [], cinemeta = {} } = {}) {
   const library = new Map(items.map((item) => [item._id, keepStremioFields(item)]));
   const collection = { addons };
   const calls = [];
@@ -24,6 +24,12 @@ function startFakeApi({ email = 'me@example.com', password = 'secret', authKey =
     const chunks = [];
     req.on('data', (chunk) => chunks.push(chunk));
     req.on('end', () => {
+      // A stand-in for Cinemeta's meta resource, for title names.
+      const meta = /^\/meta\/[^/]+\/([^/]+)\.json$/.exec(req.url);
+      if (meta) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify(cinemeta[meta[1]] ? { meta: cinemeta[meta[1]] } : {}));
+      }
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
       const method = req.url.replace('/api/', '');
       calls.push({ method, body });

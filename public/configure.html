@@ -104,6 +104,7 @@
   .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
   .note { font-size: 13px; color: var(--muted); margin: 0; }
   .actions + .note { margin-top: 12px; }
+  .tip { margin-top: 14px; }
 
   dialog {
     width: min(680px, 100vw - 24px); max-height: calc(100vh - 24px); padding: 0;
@@ -122,6 +123,13 @@
   .swatch.none span { background: none; border: 2px dashed var(--muted); }
   .swatch input:checked + span { box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--text); }
   .swatch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 5px; }
+  .icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 8px; }
+  .icon-option { position: relative; }
+  .icon-option input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+  .icon-option span { display: grid; place-items: center; height: 42px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+  .icon-option svg { width: 24px; height: 24px; fill: currentColor; }
+  .icon-option input:checked + span { border-color: var(--accent); background: rgb(123 91 245 / .22); color: var(--text); }
+  .icon-option input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   .picked { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; font-weight: 400; }
   .picked li { display: flex; align-items: center; gap: 6px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 4px 3px 12px; max-width: 100%; }
@@ -203,6 +211,7 @@
       </div>
       <ul id="folders" class="folders"></ul>
       <p id="no-folders" class="empty" hidden>No folders yet. Create your first one.</p>
+      <p class="note tip">In Stremio, open any movie or show: your folders are listed with its streams, so you can add it to one (or start a new folder) right there.</p>
     </section>
 
     <section class="card">
@@ -230,6 +239,10 @@
     <fieldset class="field">
       <legend>Color <span class="muted">(optional)</span></legend>
       <div id="f-colors" class="swatches"></div>
+    </fieldset>
+    <fieldset id="f-icon-field" class="field" hidden>
+      <legend>Icon</legend>
+      <div id="f-icons" class="icons"></div>
     </fieldset>
     <div class="field">
       <span>Titles in this folder <span id="f-count" class="muted"></span></span>
@@ -340,21 +353,24 @@
     if (lost) throw new Error("Stremio didn't store this change completely. The list shows what was saved.");
   }
 
-  // Stremio keeps its own copy of each installed addon's manifest, and the Board shows one row per
-  // catalog in that copy. After a change, give S-library's entry the fresh manifest (with the new
-  // folder rows). Other addons in the list are left exactly as they are.
+  // Stremio keeps its own copy of each installed addon's manifest: the Board shows one row per
+  // catalog in it, and it says which titles S-library offers folder entries for. After a change,
+  // or when this server runs a newer version, give S-library's entry the fresh manifest. Other
+  // addons in the list are left exactly as they are.
   async function refreshInstalledAddon() {
     const suffix = '/' + S.encodeConfig({ k: state.authKey }) + '/manifest.json';
     const { addons } = await api('addonCollectionGet', { authKey: state.authKey, update: false });
     const ours = (Array.isArray(addons) ? addons : []).filter((addon) =>
       addon && typeof addon.transportUrl === 'string' && addon.transportUrl.endsWith(suffix));
-    if (!ours.length) return;
+    let changed = false;
     for (const addon of ours) {
       const manifest = await (await fetch(addon.transportUrl, { cache: 'no-store' })).json();
       if (!manifest || manifest.id !== addon.manifest.id) return;
+      if (JSON.stringify(manifest) === JSON.stringify(addon.manifest)) continue;
       addon.manifest = manifest;
+      changed = true;
     }
-    await api('addonCollectionSet', { authKey: state.authKey, addons });
+    if (changed) await api('addonCollectionSet', { authKey: state.authKey, addons });
   }
 
   async function busy(button, task) {
@@ -393,6 +409,40 @@
     const outdated = state.folders.flatMap((folder) =>
       S.toLibraryItems(folder, { baseUrl: location.origin, previous: state.raw }));
     if (outdated.length) put(outdated).catch(() => {});
+    else refreshInstalledAddon().catch(() => {});
+    openFromLink();
+  }
+
+  // Links from Stremio open the editor directly: "#folder=<id>" edits a folder, "#new" starts
+  // one, and "#new=<type>:<id>" starts one with that title already in it.
+  function openFromLink() {
+    const params = new URLSearchParams(location.hash.slice(1));
+    if (!params.has('folder') && !params.has('new')) return;
+    history.replaceState(null, '', location.pathname + location.search);
+    if (params.has('folder')) {
+      const folder = state.folders.find((f) => f.id === params.get('folder'));
+      if (folder) openEditor(folder);
+      return;
+    }
+    openEditor(null);
+    const ref = params.get('new');
+    const split = ref ? ref.indexOf(':') : -1;
+    if (split > 0) addTitle(ref.slice(0, split), ref.slice(split + 1));
+  }
+
+  // Adds a title to the folder being edited, by id: its name and poster come from the user's
+  // library, or from Cinemeta.
+  async function addTitle(type, id) {
+    let title = state.titles.find((t) => t.id === id);
+    if (!title && /^tt\d+$/.test(id)) {
+      try {
+        const { meta } = await (await fetch('https://v3-cinemeta.strem.io/meta/' + type + '/' + id + '.json')).json();
+        if (meta && meta.name) title = { id, type, name: meta.name, poster: meta.poster };
+      } catch (_) {
+        // Use the id as its name.
+      }
+    }
+    if (state.draft && !hasItem(id)) toggleItem(title || { id, type, name: id });
   }
 
   function showConnectError(message) {
@@ -473,7 +523,7 @@
   function renderFolders() {
     const list = $('#folders');
     list.replaceChildren(...state.folders.map((folder, index) => h('li', { class: 'folder', style: '--c:' + S.colorOf(folder.color).hex },
-      h('img', { class: 'folder-icon', src: S.posterUrl(location.origin, folder.color, folder.name), alt: '' }),
+      h('img', { class: 'folder-icon', src: S.posterUrl(location.origin, folder.color, folder.name, folder.icon), alt: '' }),
       h('div', null,
         h('div', { class: 'folder-name' }, folder.name),
         h('div', { class: 'folder-meta' }, countLabel(folder.items.length)),
@@ -517,6 +567,29 @@
       h('span', { style: '--c:' + color.hex })))
   );
 
+  // The icon picker uses the same icons the server draws on posters.
+  function svgIcon(d) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 256 256');
+    svg.setAttribute('aria-hidden', 'true');
+    const shape = document.createElementNS(ns, 'path');
+    shape.setAttribute('d', d);
+    svg.append(shape);
+    return svg;
+  }
+
+  fetch('/icons.json')
+    .then((res) => res.json())
+    .then((icons) => {
+      $('#f-icons').replaceChildren(...Object.entries(icons).map(([key, icon]) => h('label', { class: 'icon-option', title: icon.label },
+        h('input', { type: 'radio', name: 'icon', value: key, 'aria-label': icon.label }),
+        h('span', null, svgIcon(icon.path)))));
+      $('#f-icon-field').hidden = false;
+      if (state.draft) form.icon.value = state.draft.icon;
+    })
+    .catch(() => {});
+
   function newId() {
     const bytes = crypto.getRandomValues(new Uint8Array(8));
     return Array.from(bytes, (b) => (b % 36).toString(36)).join('');
@@ -530,6 +603,7 @@
           name: '',
           description: '',
           color: null,
+          icon: S.DEFAULT_ICON,
           items: [],
           order: state.folders.reduce((max, f) => Math.max(max, f.order + 1), 0),
           isNew: true
@@ -538,6 +612,7 @@
     $('#f-name').value = state.draft.name;
     $('#f-description').value = state.draft.description;
     form.color.value = state.draft.color || 'none';
+    if (form.icon) form.icon.value = state.draft.icon;
     $('#f-delete').hidden = !folder;
     $('#f-query').value = '';
     setSource('library');
@@ -658,6 +733,7 @@
     draft.name = $('#f-name').value.trim();
     draft.description = $('#f-description').value.trim();
     draft.color = S.isColor(form.color.value) ? form.color.value : null;
+    if (form.icon) draft.icon = S.cleanIcon(form.icon.value);
     if (!draft.name) return $('#f-name').focus();
     const changes = S.toLibraryItems(draft, { baseUrl: location.origin, previous: state.raw });
     busy($('#f-save'), async () => {

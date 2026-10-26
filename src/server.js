@@ -7,7 +7,7 @@ const path = require('node:path');
 const addon = require('./addon');
 const stremio = require('./stremio-api');
 const { image } = require('./images');
-const { decodeConfig } = require('./shared');
+const { decodeConfig, posterUrl, ID_PREFIX, TYPE } = require('./shared');
 const { version } = require('../package.json');
 
 // CHANGELOG.md sections: a "## 1.2.0 — 2026-10-26" heading followed by "- change" lines.
@@ -24,6 +24,7 @@ function parseChangelog(text) {
 const FILES = {
   configure: fs.readFileSync(path.join(__dirname, '..', 'public', 'configure.html')),
   shared: fs.readFileSync(path.join(__dirname, 'shared.js')),
+  icons: fs.readFileSync(path.join(__dirname, '..', 'icons', 'icons.json')),
   // The running version and what changed, shown on the configure page.
   version: JSON.stringify({
     version,
@@ -73,7 +74,8 @@ function context(req, configSegment) {
   return {
     baseUrl: base,
     manifestUrl: `${base}/${configSegment}/manifest.json`,
-    configureUrl: `${base}/${configSegment}/configure`
+    configureUrl: `${base}/${configSegment}/configure`,
+    actionUrl: `${base}/${configSegment}/act`
   };
 }
 
@@ -131,15 +133,93 @@ async function manifestRoute(req, res, [, configSegment]) {
 async function resourceRoute(req, res, [, configSegment, resource, type, rawId, rawExtra]) {
   const config = decodeConfig(configSegment);
   const id = decode(rawId);
-  const folders = config && type === 'folder' ? await stremio.getFolders(config.k).catch(() => []) : [];
+  const titles = resource === 'stream' && addon.TITLE_TYPES.includes(type);
+  if (titles && !config) return sendJson(res, 200, { streams: [] });
+  const folders = config && (type === 'folder' || titles) ? await stremio.getFolders(config.k).catch(() => null) : [];
+  // Without folders (e.g. Stremio is unreachable) a title gets no entries rather than wrong ones.
+  if (titles && !folders) return sendJson(res, 200, { streams: [] });
   const ctx = context(req, configSegment);
   if (resource === 'catalog') {
     const extra = Object.fromEntries(new URLSearchParams(rawExtra ? decode(rawExtra) : ''));
-    return sendJson(res, 200, addon.catalog(folders, id, extra, ctx));
+    return sendJson(res, 200, addon.catalog(folders || [], id, extra, ctx));
   }
-  if (resource === 'stream') return sendJson(res, 200, addon.stream(folders, id));
-  const meta = addon.meta(folders, id, ctx);
+  if (resource === 'stream') return sendJson(res, 200, addon.stream(folders || [], type, id, ctx));
+  const meta = addon.meta(folders || [], id, ctx);
   sendJson(res, meta ? 200 : 404, meta ? { meta } : { err: 'Folder not found' });
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+}
+
+// The small page a folder action from Stremio's stream list opens: it confirms the change and
+// offers a way back. `links` are [label, href, primary?].
+function actionPage(res, status, { image, heading, text, links }) {
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S-library</title>
+<link rel="icon" href="/img/logo.png">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #0d0b14; color: #f3f1fa; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { width: 100%; max-width: 360px; text-align: center; }
+  img { width: 120px; border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); }
+  h1 { font-size: 22px; line-height: 1.25; margin: 18px 0 6px; }
+  p { color: #a49fb9; margin: 0 0 22px; }
+  a { display: block; margin: 10px 0; padding: 12px 16px; border-radius: 12px; background: #211d2c; border: 1px solid #2e2940; color: #f3f1fa; font-weight: 600; text-decoration: none; }
+  a.primary { background: #7b5bf5; border-color: #7b5bf5; color: #fff; }
+</style>
+</head>
+<body>
+<main>
+  ${image ? `<img src="${escapeHtml(image)}" alt="">` : ''}
+  <h1>${escapeHtml(heading)}</h1>
+  <p>${escapeHtml(text)}</p>
+  ${links.map(([label, href, primary]) => `<a${primary ? ' class="primary"' : ''} href="${escapeHtml(href)}">${escapeHtml(label)}</a>`).join('\n  ')}
+</main>
+</body>
+</html>`;
+  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  res.end(html);
+}
+
+// "/<config>/act/add|remove/<folder>/<type>/<title>": the folder entries in a title's stream list.
+async function actionRoute(req, res, [, configSegment, action, folderId, rawType, rawId]) {
+  const config = decodeConfig(configSegment);
+  const ctx = context(req, configSegment);
+  const type = decode(rawType);
+  const id = decode(rawId);
+  const back = `stremio:///detail/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
+  if (!config) {
+    return actionPage(res, 400, {
+      heading: "Couldn't change the folder",
+      text: 'This S-library link is incomplete. Reinstall the addon from its configure page.',
+      links: [['Back to Stremio', 'stremio:///', true]]
+    });
+  }
+  try {
+    const { folder, title } = await stremio.changeFolder(config.k, { action, folderId, type, id, baseUrl: ctx.baseUrl });
+    const added = action === 'add';
+    actionPage(res, 200, {
+      image: posterUrl(ctx.baseUrl, folder.color, folder.name, folder.icon),
+      heading: added ? `✓ Added to ${folder.name}` : `Taken out of ${folder.name}`,
+      text: `"${title.name}" ${added ? 'is now in' : 'is no longer in'} this folder. Press back to return to Stremio.`,
+      links: [
+        ['Back to Stremio', back, true],
+        ['Open the folder', `stremio:///detail/${TYPE}/${encodeURIComponent(ID_PREFIX + folder.id)}`],
+        ['Undo', `${ctx.actionUrl}/${added ? 'remove' : 'add'}/${folder.id}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`]
+      ]
+    });
+  } catch (err) {
+    actionPage(res, 502, {
+      heading: "Couldn't change the folder",
+      text: `${err.message} Try again in a moment.`,
+      links: [['Back to Stremio', back, true], ['Edit folders', ctx.configureUrl]]
+    });
+  }
 }
 
 async function proxyRoute(req, res, [, method]) {
@@ -162,15 +242,18 @@ const ROUTES = [
   ['GET', /^\/(?:[\w-]+\/)?configure\/?$/, (req, res) => send(res, 200, FILES.configure, 'text/html; charset=utf-8')],
   ['GET', /^\/shared\.js$/, (req, res) => send(res, 200, FILES.shared, 'text/javascript; charset=utf-8')],
   ['GET', /^\/version\.json$/, (req, res) => send(res, 200, FILES.version, 'application/json; charset=utf-8')],
+  ['GET', /^\/icons\.json$/, (req, res) => send(res, 200, FILES.icons, 'application/json; charset=utf-8')],
   ['GET', /^\/img\/(logo)\.png$/, imageRoute],
   ['GET', /^\/img\/(poster|bg)\/([a-z]+)\.png$/, imageRoute],
   ['GET', /^\/(?:([\w-]+)\/)?manifest\.json$/, manifestRoute],
   ['GET', /^\/([\w-]+)\/(catalog|meta|stream)\/([^/]+)\/([^/]+?)(?:\/([^/]+))?\.json$/, resourceRoute],
+  ['GET', /^\/([\w-]+)\/act\/(add|remove)\/([a-z0-9]+)\/([^/]+)\/([^/]+)$/, actionRoute],
   ['POST', /^\/api\/(\w+)$/, proxyRoute]
 ];
 
 function imageRoute(req, res, [, kind, color]) {
-  const png = image(kind, color, new URL(req.url, 'http://localhost').searchParams.get('name') || '');
+  const query = new URL(req.url, 'http://localhost').searchParams;
+  const png = image(kind, color, query.get('name') || '', query.get('icon') || undefined);
   if (!png) return sendJson(res, 404, { err: 'Not found' });
   send(res, 200, png, 'image/png', 'public, max-age=86400');
 }

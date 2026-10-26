@@ -27,8 +27,12 @@ let server;
 let config;
 
 test.before(async () => {
-  api = await startFakeApi({ items: [...favorites, ...deleted, movieItem] });
+  api = await startFakeApi({
+    items: [...favorites, ...deleted, movieItem],
+    cinemeta: { tt1375666: { id: 'tt1375666', type: 'movie', name: 'Inception', poster: 'https://example.com/inception.jpg' } }
+  });
   process.env.STREMIO_API_URL = api.url;
+  process.env.CINEMETA_URL = api.url;
   const { createServer } = require('../src/server');
   server = createServer();
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -100,7 +104,7 @@ test('catalog, meta and stream routes use the current host', async () => {
 
   const meta = await get(`/${config}/meta/folder/slib%3Afav.json`);
   assert.equal(meta.body.meta.name, 'Favorites');
-  assert.equal(meta.body.meta.links[1].url, `${base}/${config}/configure`);
+  assert.equal(meta.body.meta.links[1].url, `${base}/${config}/configure#folder=fav`);
 
   const missing = await get(`/${config}/meta/folder/slib:gone.json`);
   assert.equal(missing.res.status, 404);
@@ -154,6 +158,56 @@ test('saving a folder through the proxy shows up in the addon right away', async
   assert.deepEqual(put.body.result, { success: true });
   const { body } = await get(`/${config}/manifest.json`);
   assert.deepEqual(body.catalogs.map((c) => c.name), ['📁 S-library', '🔵 Favorites', '🟢 Watch later']);
+});
+
+test("a movie's stream list offers S-library's folders", async () => {
+  const { body } = await get(`/${config}/stream/movie/tt0111161.json`);
+  assert.equal(body.streams[0].description, '＋ Add to this folder');
+  assert.equal(body.streams[0].externalUrl, `${base}/${config}/act/add/fav/movie/tt0111161`);
+  assert.match(body.streams.at(-1).externalUrl, /configure#new=movie%3Att0111161$/);
+  // Without a configured account there is nothing to offer.
+  assert.deepEqual((await get('/nope/stream/movie/tt0111161.json')).body.streams, []);
+});
+
+test('adding a title from the stream list stores it and confirms', async () => {
+  const add = await fetch(`${base}/${config}/act/add/fav/movie/tt0111161`);
+  const page = await add.text();
+  assert.equal(add.status, 200);
+  assert.match(page, /✓ Added to Favorites/);
+  assert.match(page, /&quot;The Shawshank Redemption&quot; is now in this folder/);
+  assert.match(page, /href="stremio:\/\/\/detail\/movie\/tt0111161"/);
+  let [folder] = S.fromLibraryItems([...api.library.values()]);
+  assert.deepEqual(folder.items.map((item) => item.id), ['tt0133093', 'tt0111161']);
+  // The stream list now shows it's in the folder.
+  const { body } = await get(`/${config}/stream/movie/tt0111161.json`);
+  assert.equal(body.streams[0].description, '✓ In this folder · tap to take it out');
+
+  // A title that isn't in the library gets its name from Cinemeta.
+  await fetch(`${base}/${config}/act/add/fav/movie/tt1375666`);
+  [folder] = S.fromLibraryItems([...api.library.values()]);
+  assert.deepEqual(folder.items.at(-1), { id: 'tt1375666', type: 'movie', name: 'Inception', poster: 'https://example.com/inception.jpg' });
+
+  const remove = await fetch(`${base}/${config}/act/remove/fav/movie/tt0111161`);
+  assert.match(await remove.text(), /Taken out of Favorites/);
+  [folder] = S.fromLibraryItems([...api.library.values()]);
+  assert.deepEqual(folder.items.map((item) => item.id), ['tt0133093', 'tt1375666']);
+});
+
+test('a folder action explains what went wrong', async () => {
+  const missing = await fetch(`${base}/${config}/act/add/nothere/movie/tt0111161`);
+  assert.equal(missing.status, 502);
+  assert.match(await missing.text(), /doesn&#39;t exist anymore/);
+  const broken = await fetch(`${base}/nope/act/add/fav/movie/tt0111161`);
+  assert.equal(broken.status, 400);
+});
+
+test('serves the icons for the configure page', async () => {
+  const { body } = await get('/icons.json');
+  assert.ok(body.folder && body.western && body.spy && body.heart);
+  assert.match(body.western.path, /^M/);
+  const poster = await get('/img/poster/brown.png?name=Western&icon=western');
+  assert.equal(poster.res.status, 200);
+  assert.notDeepEqual(poster.body, (await get('/img/poster/brown.png?name=Western')).body);
 });
 
 test('limits sign-in attempts per client', async () => {

@@ -38,6 +38,7 @@ test('a folder survives the Stremio API, which keeps only standard library field
     description: 'All-time favorites',
     color: 'red',
     order: 2,
+    icon: 'folder',
     items: [
       { id: 'tt0133093', type: 'movie', name: 'The Matrix', poster: 'https://example.com/matrix.jpg' },
       { id: 'kitsu:1', type: 'series', name: 'Cowboy Bebop' }
@@ -110,6 +111,18 @@ test('poster links carry the color and the folder name', () => {
   assert.deepEqual(moved.map((item) => item._id), ['slib:abc123']);
 });
 
+test('a folder can have an icon, shown on its poster', () => {
+  const library = save(new Map(), S.toLibraryItems({ ...folder, icon: 'western' }, { baseUrl: BASE, previous: new Map() }));
+  const [loaded] = load(library);
+  assert.equal(loaded.icon, 'western');
+  assert.equal(library.get('slib:abc123').poster, 'https://addon.test/img/poster/red.png?name=Favorites&icon=western');
+  // The default icon isn't stored, so folders saved before icons existed don't change.
+  const plain = S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() });
+  assert.doesNotMatch(plain[1].name, /"i"/);
+  assert.equal(S.posterUrl(BASE, 'red', '', 'spy'), 'https://addon.test/img/poster/red.png?icon=spy');
+  assert.equal(S.cleanIcon('<script>'), 'folder');
+});
+
 test('reads folders saved by the first version, and ignores everything else', () => {
   const folders = S.fromLibraryItems([
     { _id: 'slib:old', type: 'folder', name: 'Westerns', poster: 'https://addon.test/img/poster/brown.png', removed: false },
@@ -122,9 +135,9 @@ test('reads folders saved by the first version, and ignores everything else', ()
     null
   ]);
   assert.deepEqual(folders, [
-    { id: 'named', name: 'Anime', description: '', color: 'green', order: 0, items: [] },
-    { id: 'junk', name: 'Untitled folder', description: '', color: null, order: 0, items: [] },
-    { id: 'old', name: 'Westerns', description: '', color: 'brown', order: 0, items: [] }
+    { id: 'named', name: 'Anime', description: '', color: 'green', order: 0, icon: 'folder', items: [] },
+    { id: 'junk', name: 'Untitled folder', description: '', color: null, order: 0, icon: 'folder', items: [] },
+    { id: 'old', name: 'Westerns', description: '', color: 'brown', order: 0, icon: 'folder', items: [] }
   ]);
 });
 

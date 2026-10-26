@@ -4,7 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { loadFont, measure, createRaster } = require('../src/font');
+const { loadFont, measure } = require('../src/font');
+const { createRaster } = require('../src/raster');
 
 const font = loadFont(fs.readFileSync(path.join(__dirname, '..', 'fonts', 'PlusJakartaSans-ExtraBold.ttf')));
 

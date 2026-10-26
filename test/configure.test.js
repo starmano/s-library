@@ -60,12 +60,18 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   await page.click('#login-form button');
   await page.waitForSelector('#app:not([hidden])');
   assert.equal(await page.getAttribute('#install', 'href'), `${base}/${config}/manifest.json`.replace('http://', 'stremio://'));
+  // Signing in brings the installed copy of the manifest up to date, e.g. after an update.
+  for (let i = 0; i < 50 && api.collection.addons[1].manifest.version !== version; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.equal(api.collection.addons[1].manifest.version, version);
 
   // A red folder with a title from the library and one found through search.
   await page.click('#new-folder');
   await page.fill('#f-name', 'Favorites');
   await page.fill('#f-description', 'All-time favorites');
   await page.click('.swatch[title=Red]');
+  await page.click('.icon-option[title=Romance]');
   await page.click('#f-results li:has-text("The Matrix") button');
   await page.click('[data-source=search]');
   await page.fill('#f-query', 'incep');
@@ -86,6 +92,8 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
     ['Watch later', null, ['tt0903747']]
   ]);
   assert.equal(folders[0].description, 'All-time favorites');
+  assert.equal(folders[0].icon, 'heart');
+  assert.equal(folders[1].icon, 'folder');
 
   // Reorder, then rename and take a title out through the editor.
   await page.click('button[aria-label="Move Watch later up"]');
@@ -120,5 +128,23 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   await page.click('#f-delete');
   await page.waitForFunction(() => document.querySelectorAll('.folder').length === 1);
   assert.deepEqual(stored().map((f) => f.name), ['Best of all time']);
+
+  // Links from Stremio's folder pages and stream lists open the editor directly.
+  const best = stored()[0];
+  await page.goto('about:blank');
+  await page.goto(`${base}/${config}/configure#folder=${best.id}`);
+  await page.waitForSelector('#editor[open]');
+  assert.equal(await page.inputValue('#f-name'), 'Best of all time');
+  assert.equal(await page.isChecked('.icon-option[title=Romance] input'), true);
+  await page.click('#f-cancel');
+  assert.equal(new URL(page.url()).hash, '', 'the link is used once');
+
+  await page.goto('about:blank');
+  await page.goto(`${base}/${config}/configure#new=movie:tt0068646`);
+  await page.waitForSelector('#editor[open] #f-items li:has-text("The Godfather")');
+  await page.fill('#f-name', 'Classics');
+  await page.click('#f-save');
+  await page.waitForSelector('.folder-name:has-text("Classics")');
+  assert.deepEqual(stored().find((f) => f.name === 'Classics').items.map((i) => i.id), ['tt0068646']);
   assert.deepEqual(errors, []);
 });
