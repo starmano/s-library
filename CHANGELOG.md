@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.12.1 — 2026-10-26
+
+- Folders open in older Stremio apps too, such as the one on Samsung TVs, instead of loading forever. Open the configure page once so folders in your Library get the fix as well.
+
 ## 1.12.0 — 2026-10-26
 
 - Sort recommendations by most popular, best rated (IMDb rating) or newest. Each title shows its year and rating.

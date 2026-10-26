@@ -58,6 +58,10 @@ test('only the folder itself is visible in the Stremio library', () => {
   ]);
   const [item] = changes;
   assert.equal(item.name, 'Favorites');
+  // Opened from the Library, it shows its stream list, also in older Stremio apps.
+  assert.equal(item.behaviorHints.defaultVideoId, 'slib:abc123');
+  const library = save(new Map(), changes);
+  assert.deepEqual(S.toLibraryItems(folder, { baseUrl: BASE, previous: library }), [], 'nothing changes on the next save');
   assert.equal(item.poster, 'https://addon.test/img/poster/red.png?name=Favorites');
   assert.equal(item._mtime, '2026-01-01T00:00:00.000Z');
   assert.equal(item.state.noNotif, true);

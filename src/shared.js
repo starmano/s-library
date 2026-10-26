@@ -219,8 +219,12 @@
     }, previous, fields, { _mtime: now });
   }
 
+  // Objects (behaviorHints) are compared by the fields given.
   function isUnchanged(previous, fields) {
-    return Boolean(previous) && Object.keys(fields).every((key) => previous[key] === fields[key]);
+    const same = (before, value) => (value && typeof value === 'object'
+      ? Boolean(before) && Object.keys(value).every((key) => before[key] === value[key])
+      : before === value);
+    return Boolean(previous) && Object.keys(fields).every((key) => same(previous[key], fields[key]));
   }
 
   // The library items to write so the user's library matches `folder`: only the ones that change.
@@ -242,7 +246,9 @@
     const before = previous.get(prefix);
     const removed = before && before.type === TYPE ? Boolean(before.removed) : !readSettings(previous.values()).library;
     const poster = folderPoster(options.baseUrl, { color, name, icon, showName: folder.showName });
-    write(prefix, { name, type: TYPE, poster, removed });
+    // Opened from the Library, the folder shows its stream list (see opensStreams in addon.js).
+    const behaviorHints = { defaultVideoId: prefix, featuredVideoId: null, hasScheduledVideos: false };
+    write(prefix, { name, type: TYPE, poster, removed, behaviorHints });
     const info = {
       d: cleanText(folder.description, LIMITS.description),
       c: color,

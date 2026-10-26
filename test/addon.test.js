@@ -79,6 +79,17 @@ test('posters can leave out the name or the icon', () => {
   assert.ok(icons.length > 90);
 });
 
+test('every S-library page opens on its own stream list, also in older Stremio apps', () => {
+  // Older apps (e.g. on Samsung TVs) don't guess it, and wait for an episode list otherwise.
+  assert.equal(addon.meta(library, 'slib:fav', ctx).behaviorHints.defaultVideoId, 'slib:fav');
+  const card = addon.catalog(library, 'slib.search', { search: 'new folder: Road trip' }, ctx).metas[0];
+  assert.equal(card.behaviorHints.defaultVideoId, card.id);
+  const id = 'slib:do:color:fav:5:red';
+  const page = addon.actionMeta(id, { page: 'folder', folder: folders[0], library, message: '✓' }, ctx);
+  assert.equal(page.behaviorHints.defaultVideoId, id);
+  assert.equal(addon.actionMeta('slib:do:help:-:0:new', { page: 'overview', library, message: '' }, ctx).behaviorHints.defaultVideoId, 'slib:do:help:-:0:new');
+});
+
 test('the S-library catalog lists the folders themselves', () => {
   const { metas } = addon.catalog(library, 'slib', {}, ctx);
   assert.equal(metas.length, 2);
@@ -90,7 +101,8 @@ test('the S-library catalog lists the folders themselves', () => {
     posterShape: 'poster',
     background: 'https://addon.test/img/bg/red.png',
     description: 'The best ones',
-    releaseInfo: '2 titles'
+    releaseInfo: '2 titles',
+    behaviorHints: { defaultVideoId: 'slib:fav' }
   });
   assert.equal(metas[1].releaseInfo, '0 titles');
 });

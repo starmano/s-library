@@ -132,9 +132,16 @@ function link(category, name, url) {
   return { name, category, url };
 }
 
+// S-library's pages have no episode list: they open on their own stream list. Stremio reads
+// that from defaultVideoId (Cinemeta sets it on every movie). Newer apps guess it when it's
+// missing; older ones, like the one on Samsung TVs, wait for episodes forever.
+function opensStreams(meta) {
+  return { ...meta, behaviorHints: { ...meta.behaviorHints, defaultVideoId: meta.id } };
+}
+
 function folderPreview(folder, ctx) {
   const count = folder.items.length;
-  return {
+  return opensStreams({
     id: ID_PREFIX + folder.id,
     type: TYPE,
     name: folder.name,
@@ -143,7 +150,7 @@ function folderPreview(folder, ctx) {
     background: backgroundUrl(ctx.baseUrl, folder.color),
     description: folder.description,
     releaseInfo: count === 1 ? '1 title' : `${count} titles`
-  };
+  });
 }
 
 // Search: "new folder: <name>", "rename <folder>: <name>" and "describe <folder>: <text>" give a
@@ -152,7 +159,7 @@ function folderPreview(folder, ctx) {
 function search({ folders, settings }, query, ctx) {
   const text = query.trim().replace(/\s+/g, ' ');
   const lower = text.toLowerCase();
-  const card = (id, name, description, poster) => ({ id, type: TYPE, name, description, poster, posterShape: 'poster' });
+  const card = (id, name, description, poster) => opensStreams({ id, type: TYPE, name, description, poster, posterShape: 'poster' });
   const hint = (topic, name, description) => card(actionId('help', '-', 0, topic), name, description, posterUrl(ctx.baseUrl, null, '?'));
   const create = (name) => card(
     actionId('new', newFolderId(), 0, encodeText(name)),
@@ -275,7 +282,7 @@ function meta(library, id, ctx) {
 
 // S-library's own page: the folders, and what can be done from here.
 function overviewMeta(id, { folders, settings }, message, ctx) {
-  return {
+  return opensStreams({
     id,
     type: TYPE,
     name: 'S-library',
@@ -287,11 +294,15 @@ function overviewMeta(id, { folders, settings }, message, ctx) {
       ...folders.map((folder) => link('Your folders', `${colorOf(folder.color).emoji} ${folder.name}`, pageLink(ID_PREFIX + folder.id))),
       ...generalLinks(settings, ctx)
     ]
-  };
+  });
 }
 
 // The page an action id opens, given what the action did (see actions.js).
 function actionMeta(id, outcome, ctx) {
+  return opensStreams(actionPage(id, outcome, ctx));
+}
+
+function actionPage(id, outcome, ctx) {
   const { page, folder, library, message, title } = outcome;
   if (page === 'added') {
     // A short page that says it's done; back returns to the title.
