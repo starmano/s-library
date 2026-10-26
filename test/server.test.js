@@ -92,7 +92,7 @@ test('base manifest requires configuration', async () => {
 test('configured manifest lists the folders from the Stremio library', async () => {
   const { body } = await get(`/${config}/manifest.json`);
   assert.equal(body.behaviorHints.configurationRequired, false);
-  assert.deepEqual(body.catalogs.map((c) => c.name), ['📁 S-library', '🔵 Favorites']);
+  assert.deepEqual(body.catalogs.map((c) => c.name), ['📁 S-library', '🔵 Favorites', 'S-library']);
 });
 
 test('catalog, meta and stream routes use the current host', async () => {
@@ -104,7 +104,7 @@ test('catalog, meta and stream routes use the current host', async () => {
 
   const meta = await get(`/${config}/meta/folder/slib%3Afav.json`);
   assert.equal(meta.body.meta.name, 'Favorites');
-  assert.equal(meta.body.meta.links[1].url, `${base}/${config}/configure#folder=fav`);
+  assert.ok(meta.body.meta.links.some((l) => l.url === `${base}/${config}/configure#folder=fav`));
 
   const missing = await get(`/${config}/meta/folder/slib:gone.json`);
   assert.equal(missing.res.status, 404);
@@ -125,7 +125,7 @@ test('a broken config or Stremio error degrades gracefully', async () => {
   assert.equal(broken.body.behaviorHints.configurationRequired, true);
   const expired = S.encodeConfig({ k: 'expired' });
   const manifest = await get(`/${expired}/manifest.json`);
-  assert.deepEqual(manifest.body.catalogs.map((c) => c.id), ['slib']);
+  assert.deepEqual(manifest.body.catalogs.map((c) => c.id), ['slib', 'slib.search']);
   const catalog = await get(`/${expired}/catalog/folder/slib.json`);
   assert.deepEqual(catalog.body.metas, []);
 });
@@ -157,14 +157,19 @@ test('saving a folder through the proxy shows up in the addon right away', async
   const put = await post('/api/datastorePut', { authKey: 'test-auth-key', collection: 'libraryItem', changes });
   assert.deepEqual(put.body.result, { success: true });
   const { body } = await get(`/${config}/manifest.json`);
-  assert.deepEqual(body.catalogs.map((c) => c.name), ['📁 S-library', '🔵 Favorites', '🟢 Watch later']);
+  assert.deepEqual(body.catalogs.map((c) => c.name), ['📁 S-library', '🔵 Favorites', '🟢 Watch later', 'S-library']);
 });
 
 test("a movie's stream list offers S-library's folders", async () => {
+  // Stremio Web (a browser, which sends an Origin header) gets web pages.
+  const web = await (await fetch(`${base}/${config}/stream/movie/tt0111161.json`, { headers: { origin: 'https://web.stremio.com' } })).json();
+  assert.equal(web.streams[0].description, '＋ Add to this folder');
+  assert.equal(web.streams[0].externalUrl, `${base}/${config}/act/add/fav/movie/tt0111161`);
+  assert.match(web.streams.at(-1).externalUrl, /configure#new=movie%3Att0111161$/);
+  // The Stremio apps get pages inside Stremio.
   const { body } = await get(`/${config}/stream/movie/tt0111161.json`);
-  assert.equal(body.streams[0].description, '＋ Add to this folder');
-  assert.equal(body.streams[0].externalUrl, `${base}/${config}/act/add/fav/movie/tt0111161`);
-  assert.match(body.streams.at(-1).externalUrl, /configure#new=movie%3Att0111161$/);
+  assert.equal(body.streams[0].externalUrl, `stremio:///detail/folder/${encodeURIComponent('slib:do:add:fav:0:movie:tt0111161')}`);
+  assert.match(body.streams.at(-1).externalUrl, /^stremio:\/\/\/detail\/folder\/slib%3Ado%3Anew-with%3A[a-z0-9]{8}%3A0%3Amovie%3Att0111161$/);
   // Without a configured account there is nothing to offer.
   assert.deepEqual((await get('/nope/stream/movie/tt0111161.json')).body.streams, []);
 });
@@ -173,8 +178,7 @@ test('adding a title from the stream list stores it and confirms', async () => {
   const add = await fetch(`${base}/${config}/act/add/fav/movie/tt0111161`);
   const page = await add.text();
   assert.equal(add.status, 200);
-  assert.match(page, /✓ Added to Favorites/);
-  assert.match(page, /&quot;The Shawshank Redemption&quot; is now in this folder/);
+  assert.match(page, /✓ Added &quot;The Shawshank Redemption&quot; to this folder/);
   assert.match(page, /href="stremio:\/\/\/detail\/movie\/tt0111161"/);
   let [folder] = S.fromLibraryItems([...api.library.values()]);
   assert.deepEqual(folder.items.map((item) => item.id), ['tt0133093', 'tt0111161']);
@@ -188,7 +192,7 @@ test('adding a title from the stream list stores it and confirms', async () => {
   assert.deepEqual(folder.items.at(-1), { id: 'tt1375666', type: 'movie', name: 'Inception', poster: 'https://example.com/inception.jpg' });
 
   const remove = await fetch(`${base}/${config}/act/remove/fav/movie/tt0111161`);
-  assert.match(await remove.text(), /Taken out of Favorites/);
+  assert.match(await remove.text(), /✓ Took &quot;The Shawshank Redemption&quot; out of this folder/);
   [folder] = S.fromLibraryItems([...api.library.values()]);
   assert.deepEqual(folder.items.map((item) => item.id), ['tt0133093', 'tt1375666']);
 });

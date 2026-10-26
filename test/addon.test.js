@@ -18,13 +18,16 @@ const folders = [
     description: 'The best ones',
     color: 'red',
     order: 0,
+    icon: 'folder',
+    version: 5,
     items: [
       { id: 'tt0133093', type: 'movie', name: 'The Matrix' },
       { id: 'kitsu:1', type: 'series', name: 'Cowboy Bebop', poster: 'https://example.com/bebop.jpg' }
     ]
   },
-  { id: 'later', name: 'Watch later', description: '', color: null, order: 1, items: [] }
+  { id: 'later', name: 'Watch later', description: '', color: null, order: 1, icon: 'folder', version: 0, items: [] }
 ];
+const library = { folders, settings: { library: true, version: 0 } };
 
 test('unconfigured manifest asks to be configured', () => {
   const manifest = addon.manifest(null, ctx);
@@ -48,7 +51,8 @@ test('configured manifest has one catalog per folder, marked with its color', ()
     [
       ['slib', '📁 S-library'],
       ['slib.fav', '🔴 Favorites'],
-      ['slib.later', '📁 Watch later']
+      ['slib.later', '📁 Watch later'],
+      ['slib.search', 'S-library']
     ]
   );
 });
@@ -82,19 +86,19 @@ test('a folder catalog lists its titles, with pagination', () => {
 });
 
 test('folder meta has description and links to its titles', () => {
-  const meta = addon.meta(folders, 'slib:fav', ctx);
+  const meta = addon.meta(library, 'slib:fav', ctx);
   assert.equal(meta.name, 'Favorites');
   assert.equal(meta.description, 'The best ones');
   assert.deepEqual(meta.links[0], {
-    name: 'Open folder',
-    category: 'S-library',
+    name: 'Open as a grid',
+    category: 'Folder',
     url: `stremio:///discover/${encodeURIComponent(ctx.manifestUrl)}/folder/slib.fav`
   });
-  assert.deepEqual(meta.links[1], { name: 'Edit this folder', category: 'S-library', url: `${ctx.configureUrl}#folder=fav` });
-  assert.deepEqual(meta.links[2], { name: 'New folder', category: 'S-library', url: `${ctx.configureUrl}#new` });
-  assert.deepEqual(meta.links.slice(3).map((l) => l.url), ['stremio:///detail/movie/tt0133093', 'stremio:///detail/series/kitsu%3A1']);
+  const titles = meta.links.filter((l) => l.category === 'In this folder');
+  assert.deepEqual(titles.map((l) => l.url), ['stremio:///detail/movie/tt0133093', 'stremio:///detail/series/kitsu%3A1']);
+  assert.ok(meta.links.some((l) => l.name === 'Edit on the web' && l.url === `${ctx.configureUrl}#folder=fav`));
   assert.deepEqual(meta.videos.map((v) => v.id), ['slib:fav:movie:tt0133093', 'slib:fav:series:kitsu:1']);
-  assert.equal(addon.meta(folders, 'slib:missing', ctx), null);
+  assert.equal(addon.meta(library, 'slib:missing', ctx), null);
 });
 
 test("a title's stream list offers every folder, and a new one", () => {

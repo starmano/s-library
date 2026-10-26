@@ -39,6 +39,7 @@ test('a folder survives the Stremio API, which keeps only standard library field
     color: 'red',
     order: 2,
     icon: 'folder',
+    version: 0,
     items: [
       { id: 'tt0133093', type: 'movie', name: 'The Matrix', poster: 'https://example.com/matrix.jpg' },
       { id: 'kitsu:1', type: 'series', name: 'Cowboy Bebop' }
@@ -123,6 +124,45 @@ test('a folder can have an icon, shown on its poster', () => {
   assert.equal(S.cleanIcon('<script>'), 'folder');
 });
 
+test('folders can be hidden from the Library and shown again', () => {
+  const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
+  // A folder deleted with Stremio's own "Remove from library" button, before folders could be hidden.
+  save(library, S.toLibraryItems({ id: 'gone', name: 'Gone', items: [] }, { baseUrl: BASE, previous: library }));
+  library.get('slib:gone').removed = true;
+  assert.deepEqual(load(library).map((f) => f.id), ['abc123']);
+  assert.equal(S.readSettings(library.values()).library, true);
+
+  save(library, S.settingsItems(false, { previous: library }));
+  assert.equal(S.readSettings(library.values()).library, false);
+  assert.equal(library.get('slib:abc123').removed, true, 'hidden from the Library');
+  assert.equal(library.get('slib:gone').type, 'slibrary-removed', 'still deleted');
+  assert.deepEqual(load(library).map((f) => f.id), ['abc123'], 'hidden folders still exist');
+
+  // New folders follow the setting.
+  save(library, S.toLibraryItems({ id: 'new1', name: 'New', items: [] }, { baseUrl: BASE, previous: library }));
+  assert.equal(library.get('slib:new1').removed, true);
+  assert.deepEqual(S.settingsItems(false, { previous: library }), [], 'nothing to change');
+
+  save(library, S.settingsItems(true, { previous: library }));
+  assert.equal(library.get('slib:abc123').removed, false);
+  assert.equal(library.get('slib:new1').removed, false);
+  assert.deepEqual(load(library).map((f) => f.id).sort(), ['abc123', 'new1']);
+});
+
+test('a deleted folder stays deleted whether folders are shown or hidden', () => {
+  const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
+  save(library, S.settingsItems(false, { previous: library }));
+  save(library, S.deletionItems('abc123', { previous: library }));
+  assert.deepEqual(load(library), []);
+  save(library, S.settingsItems(true, { previous: library }));
+  assert.deepEqual(load(library), []);
+});
+
+test("a folder's version is stored with it", () => {
+  const library = save(new Map(), S.toLibraryItems({ ...folder, version: 1234 }, { baseUrl: BASE, previous: new Map() }));
+  assert.equal(load(library)[0].version, 1234);
+});
+
 test('reads folders saved by the first version, and ignores everything else', () => {
   const folders = S.fromLibraryItems([
     { _id: 'slib:old', type: 'folder', name: 'Westerns', poster: 'https://addon.test/img/poster/brown.png', removed: false },
@@ -135,9 +175,9 @@ test('reads folders saved by the first version, and ignores everything else', ()
     null
   ]);
   assert.deepEqual(folders, [
-    { id: 'named', name: 'Anime', description: '', color: 'green', order: 0, icon: 'folder', items: [] },
-    { id: 'junk', name: 'Untitled folder', description: '', color: null, order: 0, icon: 'folder', items: [] },
-    { id: 'old', name: 'Westerns', description: '', color: 'brown', order: 0, icon: 'folder', items: [] }
+    { id: 'named', name: 'Anime', description: '', color: 'green', order: 0, icon: 'folder', version: 0, items: [] },
+    { id: 'junk', name: 'Untitled folder', description: '', color: null, order: 0, icon: 'folder', version: 0, items: [] },
+    { id: 'old', name: 'Westerns', description: '', color: 'brown', order: 0, icon: 'folder', version: 0, items: [] }
   ]);
 });
 

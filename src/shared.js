@@ -5,10 +5,14 @@
 // own item, built from those fields alone:
 //   slib:<id>                           the folder: type "folder", its name and colored poster;
 //                                       listed in Stremio's Library under the "Folder" type
-//   slib:<id>:info                      name holds {"d": description, "c": color, "o": order, "i": icon}
+//   slib:<id>:info                      name holds {"d": description, "c": color, "o": order,
+//                                       "i": icon, "t": version (time of the last in-app edit)}
 //   slib:<id>:title:<type>:<title id>   one per title in the folder, with its name and poster
-// The info and title items are marked removed, which keeps them off every Stremio screen.
-// A title taken out of a folder keeps its item, with type "slibrary-removed".
+//   slib::settings                      name holds {"library": whether folders show in the
+//                                       Library, "t": version}
+// The info, title and settings items are marked removed, which keeps them off every Stremio
+// screen. Folders are hidden from the Library the same way. A deleted folder, or a title taken
+// out of a folder, keeps its item, with type "slibrary-removed".
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.SLibrary = factory();
@@ -19,6 +23,7 @@
   const TYPE = 'folder';
   const RECORD_TYPE = 'slibrary';
   const REMOVED_RECORD_TYPE = 'slibrary-removed';
+  const SETTINGS_ID = ID_PREFIX + ':settings';
   const LIMITS = { name: 60, description: 500, items: 1000 };
 
   // Preset colors. Stremio shows catalog names as plain text, so the emoji is what marks
@@ -99,15 +104,31 @@
     return Date.parse(value) || 0;
   }
 
+  // Whether folders also show in Stremio's Library (they do unless switched off).
+  function readSettings(libraryItems) {
+    for (const item of libraryItems) {
+      if (item && item._id === SETTINGS_ID && item.type === RECORD_TYPE) {
+        const settings = parseInfo(item);
+        return { library: settings.library !== false, version: Number.isFinite(settings.t) ? settings.t : 0, stored: true };
+      }
+    }
+    return { library: true, version: 0, stored: false };
+  }
+
   // Reads the folders (not deleted ones) out of a user's library items. Other items are ignored.
   function fromLibraryItems(libraryItems) {
+    const items = Array.from(libraryItems);
+    // While folders show in the Library, a folder removed from it was deleted (that's what
+    // Stremio's own "Remove from library" button does to it). While they're hidden, every
+    // folder is removed from the Library, and only the deleted ones have another type.
+    const { library } = readSettings(items);
     const folders = new Map();
     const infos = new Map();
     const titles = new Map();
-    for (const item of libraryItems) {
+    for (const item of items) {
       const ref = item && parseId(item._id);
       if (!ref) continue;
-      if (ref.kind === 'folder' && item.type === TYPE && !item.removed) folders.set(ref.folderId, item);
+      if (ref.kind === 'folder' && item.type === TYPE && (!library || !item.removed)) folders.set(ref.folderId, item);
       else if (ref.kind === 'info' && item.type === RECORD_TYPE) infos.set(ref.folderId, item);
       else if (ref.kind === 'title' && item.type === RECORD_TYPE) {
         if (!titles.has(ref.folderId)) titles.set(ref.folderId, []);
@@ -116,7 +137,7 @@
     }
     return sortFolders(Array.from(folders, ([id, item]) => {
       const info = infos.has(id) ? parseInfo(infos.get(id)) : {};
-      const items = (titles.get(id) || []).sort((a, b) => a.added - b.added || String(a.name).localeCompare(b.name));
+      const titleList = (titles.get(id) || []).sort((a, b) => a.added - b.added || String(a.name).localeCompare(b.name));
       return {
         id,
         name: cleanText(item.name, LIMITS.name) || 'Untitled folder',
@@ -124,7 +145,8 @@
         color: isColor(info.c) ? info.c : colorFromPoster(item.poster),
         order: Number.isFinite(info.o) ? info.o : 0,
         icon: cleanIcon(info.i),
-        items: cleanItems(items)
+        version: Number.isFinite(info.t) ? info.t : 0,
+        items: cleanItems(titleList)
       };
     }));
   }
@@ -189,13 +211,15 @@
 
     const name = cleanText(folder.name, LIMITS.name) || 'Untitled folder';
     const icon = cleanIcon(folder.icon);
-    write(prefix, { name, type: TYPE, poster: posterUrl(options.baseUrl, color, name, icon), removed: false });
+    const { library } = readSettings(previous.values());
+    write(prefix, { name, type: TYPE, poster: posterUrl(options.baseUrl, color, name, icon), removed: !library });
     const info = {
       d: cleanText(folder.description, LIMITS.description),
       c: color,
       o: Number.isFinite(folder.order) ? folder.order : 0
     };
     if (icon !== DEFAULT_ICON) info.i = icon;
+    if (folder.version) info.t = folder.version;
     write(prefix + ':info', {
       name: JSON.stringify(info),
       type: RECORD_TYPE,
@@ -223,7 +247,33 @@
   function deletionItems(folderId, options) {
     const id = ID_PREFIX + folderId;
     const now = (options.now || new Date()).toISOString();
-    return [libraryItem(id, { removed: true }, options.previous.get(id), now)];
+    return [libraryItem(id, { type: REMOVED_RECORD_TYPE, removed: true }, options.previous.get(id), now)];
+  }
+
+  // The library items to write to show folders in Stremio's Library (`show`) or hide them.
+  function settingsItems(show, options) {
+    const nowMs = (options.now || new Date()).getTime();
+    const now = new Date(nowMs).toISOString();
+    const previous = options.previous;
+    const current = readSettings(previous.values());
+    if (current.library === show && current.stored) return [];
+    const changes = [];
+    if (current.library !== show) {
+      previous.forEach((item, id) => {
+        const ref = parseId(id);
+        if (!ref || ref.kind !== 'folder' || item.type !== TYPE) return;
+        // Folders removed from the Library while they were shown there were deleted: mark them
+        // so, before every folder gets removed from the Library to hide it.
+        if (current.library && item.removed) changes.push(libraryItem(id, { type: REMOVED_RECORD_TYPE }, item, now));
+        else if (item.removed === show) changes.push(libraryItem(id, { removed: !show }, item, now));
+      });
+    }
+    changes.push(libraryItem(SETTINGS_ID, {
+      name: JSON.stringify({ library: show, t: nowMs }),
+      type: RECORD_TYPE,
+      removed: true
+    }, previous.get(SETTINGS_ID), now));
+    return changes;
   }
 
   // The addon URL carries a small base64url JSON config: { k: <Stremio auth key> }.
@@ -253,11 +303,13 @@
     colorOf,
     cleanItems,
     fromLibraryItems,
+    readSettings,
     sortFolders,
     posterUrl,
     backgroundUrl,
     toLibraryItems,
     deletionItems,
+    settingsItems,
     encodeConfig,
     decodeConfig
   };

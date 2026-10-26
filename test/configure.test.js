@@ -112,10 +112,11 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   // The installed copy of the manifest picks up the folder rows (refreshed in the background);
   // other addons are untouched.
   const rows = () => api.collection.addons[1].manifest.catalogs.map((c) => c.name).join(' | ');
-  for (let i = 0; i < 50 && rows() !== '📁 S-library | 📁 Watch later | 🔴 Best of all time'; i++) {
+  const expected = '📁 S-library | 📁 Watch later | 🔴 Best of all time | S-library';
+  for (let i = 0; i < 50 && rows() !== expected; i++) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  assert.equal(rows(), '📁 S-library | 📁 Watch later | 🔴 Best of all time');
+  assert.equal(rows(), expected);
   assert.deepEqual(api.collection.addons[0], cinemeta);
 
   // Reopening from Stremio's "Configure" button signs in from the addon link and shows
@@ -146,5 +147,21 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   await page.click('#f-save');
   await page.waitForSelector('.folder-name:has-text("Classics")');
   assert.deepEqual(stored().find((f) => f.name === 'Classics').items.map((i) => i.id), ['tt0068646']);
+
+  // Folders can be hidden from Stremio's Library, and shown there again.
+  const inLibrary = () => [...api.library.values()].filter((item) => item.type === 'folder' && !item.removed).length;
+  assert.equal(await page.isChecked('#show-in-library'), true);
+  assert.equal(inLibrary(), 2);
+  await page.click('#show-in-library');
+  await page.waitForSelector('#show-in-library:not(:checked):enabled');
+  assert.equal(inLibrary(), 0);
+  assert.deepEqual(stored().map((f) => f.name), ['Best of all time', 'Classics'], 'hidden folders are still folders');
+  await page.goto('about:blank');
+  await page.goto(`${base}/${config}/configure`);
+  await page.waitForSelector('#app:not([hidden])');
+  assert.equal(await page.isChecked('#show-in-library'), false);
+  await page.click('#show-in-library');
+  await page.waitForSelector('#show-in-library:checked:enabled');
+  assert.equal(inLibrary(), 2);
   assert.deepEqual(errors, []);
 });

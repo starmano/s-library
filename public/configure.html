@@ -105,6 +105,16 @@
   .note { font-size: 13px; color: var(--muted); margin: 0; }
   .actions + .note { margin-top: 12px; }
   .tip { margin-top: 14px; }
+  .setting { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); font-weight: 600; cursor: pointer; }
+  .setting input {
+    appearance: none; -webkit-appearance: none; position: relative; width: 42px; height: 24px; margin: 1px 0 0; padding: 0;
+    border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); cursor: pointer; transition: background .15s;
+  }
+  .setting input::before { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+  .setting input:checked { background: var(--accent); border-color: var(--accent); }
+  .setting input:checked::before { transform: translateX(18px); background: #fff; }
+  .setting input:disabled { cursor: progress; opacity: .6; }
+  .setting small { display: block; margin-top: 2px; color: var(--muted); font-weight: 400; font-size: 13px; }
 
   dialog {
     width: min(680px, 100vw - 24px); max-height: calc(100vh - 24px); padding: 0;
@@ -159,7 +169,7 @@
     .folder-tools { grid-column: 1 / -1; justify-content: flex-end; }
     dialog { width: 100vw; max-width: 100vw; max-height: 100vh; height: 100vh; border-radius: 0; }
   }
-  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { #toast, .setting input, .setting input::before { transition: none; } }
 </style>
 </head>
 <body>
@@ -211,7 +221,11 @@
       </div>
       <ul id="folders" class="folders"></ul>
       <p id="no-folders" class="empty" hidden>No folders yet. Create your first one.</p>
-      <p class="note tip">In Stremio, open any movie or show: your folders are listed with its streams, so you can add it to one (or start a new folder) right there.</p>
+      <p class="note tip">In Stremio, open any movie or show: your folders are listed with its streams, so you can add it to one (or start a new folder) right there. Open a folder in Stremio to rename, recolor, move or delete it, or search for "new folder: " and a name to create one.</p>
+      <label class="setting">
+        <input id="show-in-library" type="checkbox" role="switch">
+        <span>Show folders in my Stremio Library<small>When off, folders stay on the Board, in Discover and in Stremio's search, but not between your movies and shows in the Library.</small></span>
+      </label>
     </section>
 
     <section class="card">
@@ -344,6 +358,7 @@
     stored.forEach((item) => state.raw.set(item._id, item));
     state.folders = S.fromLibraryItems(Array.from(state.raw.values()));
     renderFolders();
+    renderSettings();
     refreshInstalledAddon().catch(() => {});
     const kept = new Map(stored.map((item) => [item._id, item]));
     const lost = changes.some((item) => {
@@ -403,6 +418,7 @@
     $('#connect').hidden = true;
     $('#app').hidden = false;
     renderFolders();
+    renderSettings();
     renderInstall();
     // Folders saved by an earlier version, or through another address, get their library
     // poster brought up to date (it carries the folder's name and this server's address).
@@ -537,6 +553,26 @@
     )));
     $('#no-folders').hidden = state.folders.length > 0;
   }
+
+  function renderSettings() {
+    $('#show-in-library').checked = S.readSettings(state.raw.values()).library;
+  }
+
+  // Hiding folders from the Library marks them removed there, the way Stremio's own
+  // "Remove from library" does; S-library still lists them everywhere else.
+  $('#show-in-library').addEventListener('change', (event) => {
+    const input = event.currentTarget;
+    const show = input.checked;
+    busy(input, async () => {
+      try {
+        await put(S.settingsItems(show, { previous: state.raw }));
+        toast(show ? 'Folders show in your Library' : 'Folders are hidden from your Library');
+      } catch (err) {
+        toast(err.message, true);
+      }
+      renderSettings();
+    });
+  });
 
   function move(button, index, delta) {
     const target = index + delta;
@@ -735,7 +771,8 @@
     draft.color = S.isColor(form.color.value) ? form.color.value : null;
     if (form.icon) draft.icon = S.cleanIcon(form.icon.value);
     if (!draft.name) return $('#f-name').focus();
-    const changes = S.toLibraryItems(draft, { baseUrl: location.origin, previous: state.raw });
+    // A new version makes edit links on folder pages already open in Stremio out of date.
+    const changes = S.toLibraryItems(Object.assign({}, draft, { version: Date.now() }), { baseUrl: location.origin, previous: state.raw });
     busy($('#f-save'), async () => {
       try {
         await put(changes);

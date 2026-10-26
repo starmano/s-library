@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const addon = require('./addon');
 const stremio = require('./stremio-api');
+const { runAction } = require('./actions');
 const { image } = require('./images');
 const { decodeConfig, posterUrl, ID_PREFIX, TYPE } = require('./shared');
 const { version } = require('../package.json');
@@ -75,7 +76,9 @@ function context(req, configSegment) {
     baseUrl: base,
     manifestUrl: `${base}/${configSegment}/manifest.json`,
     configureUrl: `${base}/${configSegment}/configure`,
-    actionUrl: `${base}/${configSegment}/act`
+    actionUrl: `${base}/${configSegment}/act`,
+    // The Stremio apps don't send an Origin header; Stremio Web, running in a browser, does.
+    native: !req.headers.origin
   };
 }
 
@@ -133,19 +136,51 @@ async function manifestRoute(req, res, [, configSegment]) {
 async function resourceRoute(req, res, [, configSegment, resource, type, rawId, rawExtra]) {
   const config = decodeConfig(configSegment);
   const id = decode(rawId);
-  const titles = resource === 'stream' && addon.TITLE_TYPES.includes(type);
-  if (titles && !config) return sendJson(res, 200, { streams: [] });
-  const folders = config && (type === 'folder' || titles) ? await stremio.getFolders(config.k).catch(() => null) : [];
-  // Without folders (e.g. Stremio is unreachable) a title gets no entries rather than wrong ones.
-  if (titles && !folders) return sendJson(res, 200, { streams: [] });
   const ctx = context(req, configSegment);
+  const titles = resource === 'stream' && addon.TITLE_TYPES.includes(type);
+  const nothing = () => {
+    if (resource === 'catalog') return sendJson(res, 200, { metas: [] });
+    if (resource === 'stream') return sendJson(res, 200, { streams: [] });
+    sendJson(res, 404, { err: 'Not found' });
+  };
+  if (!config || (type !== 'folder' && !titles)) return nothing();
+  const action = resource === 'meta' && addon.parseAction(id);
+  if (action) return sendJson(res, 200, { meta: await actionPageMeta(config.k, configSegment, id, action, ctx) });
+  // Without the folders (e.g. Stremio is unreachable) show nothing rather than something wrong.
+  const library = await stremio.getLibrary(config.k).catch(() => null);
+  if (!library) return nothing();
   if (resource === 'catalog') {
-    const extra = Object.fromEntries(new URLSearchParams(rawExtra ? decode(rawExtra) : ''));
-    return sendJson(res, 200, addon.catalog(folders || [], id, extra, ctx));
+    // Stremio encodes each extra value, so a search can hold "&" or "+" of its own.
+    const extra = Object.fromEntries(new URLSearchParams(rawExtra || ''));
+    return sendJson(res, 200, addon.catalog(library.folders, id, extra, ctx));
   }
-  if (resource === 'stream') return sendJson(res, 200, addon.stream(folders || [], type, id, ctx));
-  const meta = addon.meta(folders || [], id, ctx);
+  if (resource === 'stream') return sendJson(res, 200, addon.stream(library.folders, type, id, ctx));
+  const meta = addon.meta(library, id, ctx);
   sendJson(res, meta ? 200 : 404, meta ? { meta } : { err: 'Folder not found' });
+}
+
+// After a change to the folder rows, updates the manifest Stremio keeps for S-library.
+function refreshInstalledManifest(authKey, configSegment, folders) {
+  const suffix = `/${configSegment}/manifest.json`;
+  stremio
+    .updateInstalledManifest(authKey, suffix, (link) => addon.manifest(folders, { baseUrl: link.slice(0, -suffix.length) }))
+    .catch(() => {});
+}
+
+// Runs an in-app action (an "slib:do:..." page) and returns the page to show, also on failure.
+async function actionPageMeta(authKey, configSegment, id, action, ctx) {
+  try {
+    const outcome = await runAction(authKey, action, ctx);
+    if (outcome.structural) refreshInstalledManifest(authKey, configSegment, outcome.library.folders);
+    const folder = outcome.library.folders.find((f) => f.id === outcome.folderId);
+    if (outcome.page !== 'overview' && !folder) {
+      return addon.actionMeta(id, { page: 'overview', library: outcome.library, message: "This folder doesn't exist anymore." }, ctx);
+    }
+    return addon.actionMeta(id, { ...outcome, folder }, ctx);
+  } catch (err) {
+    const library = await stremio.getLibrary(authKey).catch(() => ({ folders: [], settings: { library: true, version: 0 } }));
+    return addon.actionMeta(id, { page: 'overview', library, message: `That didn't work: ${err.message} Go back and try again.` }, ctx);
+  }
 }
 
 function escapeHtml(text) {
@@ -186,8 +221,9 @@ function actionPage(res, status, { image, heading, text, links }) {
   res.end(html);
 }
 
-// "/<config>/act/add|remove/<folder>/<type>/<title>": the folder entries in a title's stream list.
-async function actionRoute(req, res, [, configSegment, action, folderId, rawType, rawId]) {
+// "/<config>/act/add|remove/<folder>/<type>/<title>": the folder entries in a title's stream list,
+// for Stremio Web, which opens them in a new tab.
+async function actionRoute(req, res, [, configSegment, verb, folderId, rawType, rawId]) {
   const config = decodeConfig(configSegment);
   const ctx = context(req, configSegment);
   const type = decode(rawType);
@@ -201,16 +237,17 @@ async function actionRoute(req, res, [, configSegment, action, folderId, rawType
     });
   }
   try {
-    const { folder, title } = await stremio.changeFolder(config.k, { action, folderId, type, id, baseUrl: ctx.baseUrl });
-    const added = action === 'add';
+    const outcome = await runAction(config.k, { verb, folderId, version: 0, arg: `${type}:${id}` }, ctx);
+    const folder = outcome.library.folders.find((f) => f.id === folderId);
+    if (!folder) throw new Error(outcome.message);
     actionPage(res, 200, {
       image: posterUrl(ctx.baseUrl, folder.color, folder.name, folder.icon),
-      heading: added ? `✓ Added to ${folder.name}` : `Taken out of ${folder.name}`,
-      text: `"${title.name}" ${added ? 'is now in' : 'is no longer in'} this folder. Press back to return to Stremio.`,
+      heading: outcome.message,
+      text: 'Press back to return to Stremio.',
       links: [
         ['Back to Stremio', back, true],
         ['Open the folder', `stremio:///detail/${TYPE}/${encodeURIComponent(ID_PREFIX + folder.id)}`],
-        ['Undo', `${ctx.actionUrl}/${added ? 'remove' : 'add'}/${folder.id}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`]
+        ['Undo', `${ctx.actionUrl}/${verb === 'add' ? 'remove' : 'add'}/${folder.id}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`]
       ]
     });
   } catch (err) {

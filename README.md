@@ -4,15 +4,17 @@ A Stremio addon that adds **folders** to your Stremio library. Each folder has a
 
 - Plain Node.js, **zero dependencies** (only Node's built-in `http` and `zlib`)
 - No database: folders are saved in your own Stremio account and sync to every device
-- One small configure page to create and edit folders
+- Create and edit folders inside Stremio, or on one small configure page
 
 ## What you get in Stremio
 
 | Where | What you see |
 | --- | --- |
-| **Library** | A new **Folder** type in the type filter. Every folder shows up as a poster in its color, with its name on it, next to your movies and series. |
-| **Folder page** | Open a folder to see its description, the number of titles, and the titles in it. Click a title to go to it, or **Open folder** to browse it as a poster grid. |
+| **Library** | A new **Folder** type in the type filter. Every folder shows up as a poster in its color, with its name on it, next to your movies and series. You can switch this off. |
+| **Folder page** | Open a folder to see its description, the number of titles, and the titles in it. Click a title to go to it, or **Open as a grid** to browse it as a poster grid. Links on the page rename, describe, recolor, move or delete the folder. |
 | **Board / Discover** | A **📁 S-library** row with all your folders, plus one row per folder, marked with its color: `🔴 Favorites`, `🔵 Watch later`, … |
+| **A movie or show** | Its list of streams shows your folders: tap one to add the title to it or take it out, or start a new folder with it. |
+| **Search** | Your folders, and a card to create a folder with that name. |
 
 Colors: 🔴 red, 🟠 orange, 🟡 yellow, 🟢 green, 🔵 blue, 🟣 purple, 🟤 brown, ⚫ black, ⚪ white, or none (📁).
 
@@ -20,22 +22,30 @@ Colors: 🔴 red, 🟠 orange, 🟡 yellow, 🟢 green, 🔵 blue, 🟣 purple, 
 
 1. Open the addon's configure page (`https://<your-host>/configure`) and sign in with your Stremio account.
    Signed up with Facebook, Google or Apple? Use the auth key option on the same page instead.
-2. Create folders: pick a name, and if you like a description, a color and an icon. Add titles from your library or from a Stremio search.
-3. Click **Install in Stremio** (or **Install in Stremio Web**). You only need to install once.
+2. Click **Install in Stremio** (or **Install in Stremio Web**). You only need to install once.
+3. Create folders, here or inside Stremio: pick a name, and if you like a description, a color and an icon. On the configure page you can add titles from your library or from a Stremio search.
 
 ### Inside Stremio
 
-Stremio doesn't let addons add buttons, so S-library works through lists Stremio already shows:
+Stremio doesn't let addons add buttons, so S-library works through what Stremio already shows: links on a folder's page, cards in search results and entries in a title's list of streams. Opening one makes the change and shows the folder (or S-library's own page) with a ✓ message at the top.
 
-- **Add a title to a folder:** open a movie or show. Its list of streams shows your folders: tap one to add the title, or tap a folder marked "✓ In this folder" to take it out. A short confirmation page opens; press back to return to Stremio. The list also has **New folder with this title**.
-- **Edit or create folders:** a folder's page has **Edit this folder** and **New folder** links, which open the editor already signed in. **Configure** on S-library in Stremio's addon list opens it too.
+- **Add a title to a folder:** open a movie or show. Its list of streams shows your folders: tap one to add the title, or tap a folder marked "✓ In this folder" to take it out. **New folder with this title** creates a folder with it.
+- **Create a folder:** search for `new folder: Road trip` and open the **＋ New folder "Road trip"** card. Any search also offers a new folder with what you typed. The **New folder** link on a folder's page fills in the search for you.
+- **Rename or describe a folder:** tap **Rename** or **Description** on its page. This opens the search with `rename Favorites: ` (or `describe Favorites: `) typed in: type the new name or description after the colon and open the card.
+- **Color, icon, order:** tap a color or icon on the folder's page (the current one has a ✓), or **Move up** / **Move down**.
+- **Delete a folder:** tap **Delete** on its page and confirm. The titles in it are not touched.
 - **Take a title out of a folder:** on the folder's page, pick the title and choose **Take it out**.
+- **Show or hide folders in the Library:** tap **Hide folders from my Library** on any folder's page, or use the switch on the configure page. Hidden folders stay on the Board, in Discover under the type **Folder**, and in search.
 
-Changes reach Stremio the next time you open it or switch back to its window. There's no need to install the addon again.
+Edit links are made for the folder as it was when its page opened. Stremio loads a page again when you go back to it; if the folder has changed since, the old link changes nothing and says so, so going back never undoes a newer change.
+
+Stremio Web (and any Stremio app that talks to addons the way a browser does) opens stream-list entries in a new tab, so there they open a small confirmation page instead, and **New folder with this title** opens the configure page.
+
+Changes to the folder rows on the Board reach Stremio the next time you open it or switch back to its window. There's no need to install the addon again.
 
 The version the server runs is shown next to the title on the configure page, with a short note on what changed. The notes open by themselves the first time you see a new version.
 
-Removing a folder from your library inside Stremio deletes the folder. The titles in it are not touched.
+While folders show in the Library, removing a folder from the library with Stremio's own button deletes the folder. The titles in it are not touched.
 
 ## Running it
 
@@ -105,21 +115,24 @@ Stremio doesn't let addons change its interface, but its library accepts any con
 | Library item `_id` | What it holds |
 | --- | --- |
 | `slib:<folder id>` | The folder: type `folder` (its own type in the Library), its name, and a colored poster |
-| `slib:<folder id>:info` | `name` holds `{"d": description, "c": color, "o": order}` |
+| `slib:<folder id>:info` | `name` holds `{"d": description, "c": color, "o": order, "i": icon, "t": version}` |
 | `slib:<folder id>:title:<type>:<title id>` | One per title in the folder, with the title's name and poster |
+| `slib::settings` | `name` holds `{"library": whether folders show in the Library, "t": version}` |
 
-The `info` and `title` items are marked as removed, so Stremio never lists them anywhere. A title taken out of a folder keeps its item, with its type changed to `slibrary-removed`. After every save, the configure page reads the items back from Stremio and reports any change that didn't stick.
+The `info`, `title` and `settings` items are marked as removed, so Stremio never lists them anywhere. Hiding folders from the Library marks the folder items removed too. A deleted folder, or a title taken out of a folder, keeps its item, with its type changed to `slibrary-removed`. After every save, the configure page and the addon read the items back from Stremio and report any change that didn't stick.
 
 The addon then reads those items through the Stremio API and serves:
 
 - **catalogs**: `📁 S-library` (all folders) and one catalog per folder,
-- **meta** for `slib:` ids: the folder page, with links to its titles,
-- **stream** for every movie and show: one entry per folder, to add the title or take it out, plus **New folder with this title**. Each entry opens `/<config>/act/add|remove/<folder>/<type>/<id>`, which makes the change through the Stremio API and shows a confirmation page. A title's name and poster come from your library, or from Cinemeta.
+- **catalog** `slib.search`: S-library's search results (folders, and cards that create, rename or describe one),
+- **meta** for `slib:` ids: the folder page, with links to its titles and to edit it,
+- **meta** for `slib:do:<action>:<folder id>:<version>[:<argument>]` ids: the page an edit link or card opens. Asking for it makes the change through the Stremio API (`src/actions.js`) and returns the folder page with the outcome. Changes to the folder itself only apply when `<version>` matches the folder's current version.
+- **stream** for every movie and show: one entry per folder, to add the title or take it out, plus **New folder with this title**. In the Stremio apps each entry opens an `slib:do:` page. Stremio Web sends an `Origin` header and opens entries in a new tab, so it gets `/<config>/act/add|remove/<folder>/<type>/<id>` instead, which makes the change and shows a confirmation page. A title's name and poster come from your library, or from Cinemeta.
 - **stream** for a folder's title list: open the title, or take it out of the folder.
 
 Folder posters (with the folder's name and icon), backgrounds and the logo are PNGs drawn by the addon itself and cached in memory. Names are written in Plus Jakarta Sans, the font Stremio's own interface uses, which is bundled in `fonts/` under the SIL Open Font License (`fonts/OFL.txt`). Icons are a selection of [Phosphor Icons](https://phosphoricons.com) (fill style, MIT license, `icons/LICENSE`).
 
-Stremio keeps its own copy of each installed addon's manifest, and Board rows come from that copy. So after every change the configure page also refreshes the manifest stored for S-library in your addon list. Other addons in the list are left as they are.
+Stremio keeps its own copy of each installed addon's manifest, and Board rows come from that copy. So after every change to the folder rows, the configure page or the addon also refreshes the manifest stored for S-library in your addon list. Other addons in the list are left as they are.
 
 ### Files
 
@@ -127,9 +140,10 @@ Stremio keeps its own copy of each installed addon's manifest, and Board rows co
 | --- | --- |
 | `app.js` | Starts the server (`npm start`, Docker, cPanel) |
 | `src/server.js` | HTTP server and routes |
-| `src/addon.js` | Manifest, catalog, meta and stream responses |
+| `src/addon.js` | Manifest, catalog, meta and stream responses, including the in-app edit links |
+| `src/actions.js` | What the in-app edit links and cards do |
 | `src/shared.js` | Folder model and colors, shared by the server and the configure page |
-| `src/stremio-api.js` | Stremio API client, with a 15-second cache of each account's folders |
+| `src/stremio-api.js` | Stremio API client, with a 15-second cache of each account's folders, and saving with read-back |
 | `src/images.js` | Folder poster, background and logo PNGs |
 | `src/font.js` | Reads the bundled font |
 | `src/raster.js` | Draws text and icons (SVG paths) with smooth edges |
@@ -147,7 +161,8 @@ Stremio keeps its own copy of each installed addon's manifest, and Board rows co
 
 ## Limitations
 
-- Titles are added to folders on the configure page. Stremio has no way for an addon to add an "Add to folder" button to its own screens.
+- Stremio has no way for an addon to add an "Add to folder" button or a text field to its own screens, which is why folders are edited through stream lists, links and search.
+- Stremio doesn't always ask for a page again right away, so the folder rows on the Board can take a moment (or a restart of Stremio) to catch up with a change.
 - You need a Stremio account; folders are stored in it.
 - If a new folder's row doesn't show up on the Board, remove S-library and install it again from the configure page. The link stays the same, so nothing is lost.
 - On Stremio Web, use the title links on the left of a folder page to jump to a title. The entries in the list on the right open titles through a `stremio://` link, which only the Stremio apps handle.
