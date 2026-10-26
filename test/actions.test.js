@@ -185,8 +185,9 @@ test('one tap in a title\'s stream list adds it to a folder, inside the app', as
   page = await open(again.externalUrl);
   assert.equal(page.name, 'Already in "Watch later"');
   assert.deepEqual(folder('later').items.map((i) => i.id), ['tt0111161']);
-  const { streams: inFolder } = await json(`/${config}/stream/folder/${encodeURIComponent('slib:later:movie:tt0111161')}.json`);
-  assert.deepEqual(inFolder.map((s) => s.name), ['🎬 Open title']);
+  // The folder's page lists it; one tap opens it, and there's nothing to take it out with.
+  const { streams: inFolder } = await json(`/${config}/stream/folder/slib%3Alater.json`);
+  assert.deepEqual(inFolder.map((s) => [s.name, s.externalUrl]), [['The Shawshank Redemption', 'stremio:///detail/movie/tt0111161']]);
   // A remove link from an earlier version changes nothing.
   await open('slib:do:remove:later:0:movie:tt0111161');
   assert.deepEqual(folder('later').items.map((i) => i.id), ['tt0111161']);

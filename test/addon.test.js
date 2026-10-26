@@ -119,7 +119,7 @@ test('folder meta has description and links to its titles', () => {
   const titles = meta.links.filter((l) => l.category === 'In this folder');
   assert.deepEqual(titles.map((l) => l.url), ['stremio:///detail/movie/tt0133093', 'stremio:///detail/series/kitsu%3A1']);
   assert.ok(meta.links.some((l) => l.name === 'Edit on the web' && l.url === `${ctx.configureUrl}#folder=fav`));
-  assert.deepEqual(meta.videos.map((v) => v.id), ['slib:fav:movie:tt0133093', 'slib:fav:series:kitsu:1']);
+  assert.equal(meta.videos, undefined, 'no episode-style list: Stremio shows the stream list, which has the titles');
   assert.equal(addon.meta(library, 'slib:missing', ctx), null);
 });
 
@@ -135,10 +135,18 @@ test("a title's stream list offers every folder, and a new one", () => {
   assert.equal(addon.stream([], 'series', 'tt0944947:1:1', ctx).streams[0].externalUrl, 'https://addon.test/cfg/configure#new=series%3Att0944947');
 });
 
-test('a title in a folder can be opened from the folder page', () => {
-  assert.deepEqual(addon.stream(folders, 'folder', 'slib:fav:series:kitsu:1', ctx).streams, [
-    { name: '🎬 Open title', description: 'Go to "Cowboy Bebop" to watch it', externalUrl: 'stremio:///detail/series/kitsu%3A1' }
+test("a folder's page lists its titles, and one tap opens one", () => {
+  const native = { ...ctx, native: true };
+  assert.deepEqual(addon.stream(folders, 'folder', 'slib:fav', native).streams, [
+    { name: 'The Matrix', description: 'Movie · tap to open', thumbnail: 'https://images.metahub.space/poster/medium/tt0133093/img', externalUrl: 'stremio:///detail/movie/tt0133093' },
+    { name: 'Cowboy Bebop', description: 'Series · tap to open', thumbnail: 'https://example.com/bebop.jpg', externalUrl: 'stremio:///detail/series/kitsu%3A1' }
   ]);
+  // Stremio Web opens these in a new tab, so they lead to Stremio Web.
+  assert.equal(addon.stream(folders, 'folder', 'slib:fav', ctx).streams[0].externalUrl, 'https://web.stremio.com/#/detail/movie/tt0133093');
+  // The same list on a page an edit opens.
+  assert.equal(addon.stream(folders, 'folder', 'slib:do:color:fav:5:red', native).streams.length, 2);
+  // Links from folder pages of earlier versions still open the title.
+  assert.equal(addon.stream(folders, 'folder', 'slib:fav:series:kitsu:1', native).streams[0].externalUrl, 'stremio:///detail/series/kitsu%3A1');
   // An empty folder's page explains how to fill it.
   assert.match(addon.stream(folders, 'folder', 'slib:later', ctx).streams[0].description, /folder is empty/);
   assert.deepEqual(addon.stream(folders, 'folder', 'slib:missing', ctx).streams, []);

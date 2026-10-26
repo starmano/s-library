@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.8.0 — 2026-10-26
+
+- A folder's page lists its titles with their posters, and one tap opens a title, without an "Open title" step in between.
+
 ## 1.7.0 — 2026-10-26
 
 - Adding a title to a folder from its list of streams is one tap, with a short "✓ Added" page that leads straight back to the title.

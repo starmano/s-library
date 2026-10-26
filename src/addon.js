@@ -18,6 +18,7 @@ const FOLDER_CATALOG_PREFIX = 'slib.';
 const ACTION_PREFIX = `${ID_PREFIX}do:`;
 // Titles whose stream list gets S-library's "add to folder" entries.
 const TITLE_TYPES = ['movie', 'series', 'anime'];
+const TYPE_LABELS = { movie: 'Movie', series: 'Series', anime: 'Anime', channel: 'Channel', tv: 'TV' };
 
 // `library` ({ folders, settings }) is null when the addon has not been configured yet.
 function manifest(library, ctx) {
@@ -65,12 +66,16 @@ function itemPoster(item) {
   return /^tt\d+$/.test(item.id) ? `https://images.metahub.space/poster/medium/${item.id}/img` : undefined;
 }
 
-function itemThumbnail(item) {
-  return /^tt\d+$/.test(item.id) ? `https://images.metahub.space/background/medium/${item.id}/img` : itemPoster(item);
-}
 
 function detailLink(type, id) {
   return `stremio:///detail/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
+}
+
+// A title's page, from a stream-list entry. Stremio Web opens those in a new tab, where a
+// "stremio:" link does nothing, so it gets the title's page on Stremio Web instead.
+function openLink(ctx, type, id) {
+  if (ctx.native) return detailLink(type, id);
+  return `https://web.stremio.com/#/detail/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
 }
 
 // A page inside Stremio: a folder, or an action.
@@ -205,11 +210,8 @@ function catalog(library, id, extra, ctx) {
   return { metas: metas.slice(skip, skip + PAGE_SIZE) };
 }
 
-// Video ids look like "slib:<folder id>:<type>:<title id>"; title ids may contain ":" themselves.
-function videoId(folder, item) {
-  return `${ID_PREFIX}${folder.id}:${item.type}:${item.id}`;
-}
-
+// Folder pages up to version 1.7 listed their titles as videos, with ids like
+// "slib:<folder id>:<type>:<title id>" (title ids may contain ":" themselves).
 function parseVideoId(id) {
   if (id.startsWith(ACTION_PREFIX)) return null;
   const [prefix, folderId, type, ...rest] = id.split(':');
@@ -255,9 +257,9 @@ function folderMeta(folder, { folders, settings }, ctx) {
         link('Icon', `${key === folder.icon ? '✓ ' : ''}${icon.label}`, edit('icon', key))),
       ...folder.items.map((item) => link('In this folder', item.name, detailLink(item.type, item.id))),
       ...generalLinks(settings, ctx, `${ctx.configureUrl}#folder=${folder.id}`)
-    ],
-    // The folder's contents, listed where Stremio normally shows episodes.
-    videos: folder.items.map((item) => ({ id: videoId(folder, item), title: item.name, thumbnail: itemThumbnail(item) }))
+    ]
+    // No videos: Stremio then shows the page's stream list right away, and that lists the
+    // folder's titles (see stream), so one tap opens a title.
   };
 }
 
@@ -367,28 +369,29 @@ function stream(folders, type, id, ctx) {
       const ref = splitTitle(action.arg);
       const item = ref && folder.items.find((i) => i.id === ref.id);
       if (!item) return { streams: [] };
-      return { streams: [{ name: '◀ Back', description: `Back to "${item.name}"`, externalUrl: detailLink(item.type, item.id) }] };
+      return { streams: [{ name: '◀ Back', description: `Back to "${item.name}"`, externalUrl: openLink(ctx, item.type, item.id) }] };
     }
-    // Stremio asks a page without a list of titles for its streams: say what to do instead.
+    // A folder's page (or an edit that shows it): its titles, each opened with one tap.
+    if (folder.items.length) {
+      return {
+        streams: folder.items.map((item) => ({
+          name: item.name,
+          description: `${TYPE_LABELS[item.type] || item.type} · tap to open`,
+          thumbnail: itemPoster(item),
+          externalUrl: openLink(ctx, item.type, item.id)
+        }))
+      };
+    }
     return {
       streams: [{
         name: '📁 S-library',
-        description: folder.items.length
-          ? 'Pick a title in this folder, or use the links on the left.'
-          : 'This folder is empty. Open a movie or show and pick this folder in its list of streams.',
+        description: 'This folder is empty. Open a movie or show and pick this folder in its list of streams.',
         externalUrl: ctx.native ? searchLink('') : `${ctx.configureUrl}#folder=${folder.id}`
       }]
     };
   }
-  // A title in a folder's list: jump to it.
-  const item = folder && folder.items.find((i) => i.id === video.itemId);
-  return {
-    streams: [{
-      name: '🎬 Open title',
-      description: `Go to "${item ? item.name : video.itemId}" to watch it`,
-      externalUrl: detailLink(video.type, video.itemId)
-    }]
-  };
+  // A title from a folder page of an earlier version: open it.
+  return { streams: [{ name: '🎬 Open', description: 'Tap to open', externalUrl: openLink(ctx, video.type, video.itemId) }] };
 }
 
 module.exports = {
