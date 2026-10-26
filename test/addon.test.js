@@ -135,25 +135,26 @@ test("a title's stream list offers every folder, and a new one", () => {
   assert.equal(addon.stream({ folders: [], settings }, 'series', 'tt0944947:1:1', ctx).streams[0].externalUrl, 'https://addon.test/cfg/configure#new=series%3Att0944947');
 });
 
-test("a folder's page leads to its poster grid", () => {
+test("a folder's page leads to its poster grid, then lists its titles", () => {
   const native = { ...ctx, native: true };
   const grid = `discover/${encodeURIComponent(ctx.manifestUrl)}/folder/slib.fav`;
+  const titles = [
+    { name: 'The Matrix', description: 'Movie · tap to open', thumbnail: 'https://images.metahub.space/poster/medium/tt0133093/img', externalUrl: 'stremio:///detail/movie/tt0133093' },
+    { name: 'Cowboy Bebop', description: 'Series · tap to open', thumbnail: 'https://example.com/bebop.jpg', externalUrl: 'stremio:///detail/series/kitsu%3A1' }
+  ];
   assert.deepEqual(addon.stream(library, 'folder', 'slib:fav', native).streams, [{
     name: '🖼️ Show as posters',
     description: 'Open the 2 titles in "Favorites" as posters.\nTap one to open it; back brings you to the posters again.',
     externalUrl: `stremio:///${grid}`
-  }]);
+  }, ...titles]);
   // Stremio Web opens stream entries in a new tab, so it gets Stremio Web's address.
   assert.equal(addon.stream(library, 'folder', 'slib:fav', ctx).streams[0].externalUrl, `https://web.stremio.com/#/${grid}`);
   // The same on a page an edit opens.
   assert.equal(addon.stream(library, 'folder', 'slib:do:color:fav:5:red', native).streams[0].name, '🖼️ Show as posters');
 
-  // Without the grid (folders left out of Discover), the titles themselves, one tap each.
+  // Without the grid (folders left out of Discover), just the titles.
   const noGrid = { folders, settings: { ...settings, discover: false } };
-  assert.deepEqual(addon.stream(noGrid, 'folder', 'slib:fav', native).streams, [
-    { name: 'The Matrix', description: 'Movie · tap to open', thumbnail: 'https://images.metahub.space/poster/medium/tt0133093/img', externalUrl: 'stremio:///detail/movie/tt0133093' },
-    { name: 'Cowboy Bebop', description: 'Series · tap to open', thumbnail: 'https://example.com/bebop.jpg', externalUrl: 'stremio:///detail/series/kitsu%3A1' }
-  ]);
+  assert.deepEqual(addon.stream(noGrid, 'folder', 'slib:fav', native).streams, titles);
   assert.equal(addon.stream(noGrid, 'folder', 'slib:fav', ctx).streams[0].externalUrl, 'https://web.stremio.com/#/detail/movie/tt0133093');
 
   // Links from folder pages of earlier versions still open the title.

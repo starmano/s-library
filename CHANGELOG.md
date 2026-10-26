@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.10.0 — 2026-10-26
+
+- A folder's page lists its titles again, below "🖼️ Show as posters". One tap on a title opens it.
+
 ## 1.9.1 — 2026-10-26
 
 - The release notes on the configure page stay closed until you tap them, and scroll inside their own box.

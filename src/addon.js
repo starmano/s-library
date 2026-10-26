@@ -376,27 +376,25 @@ function stream({ folders, settings }, type, id, ctx) {
       if (!item) return { streams: [] };
       return { streams: [{ name: '◀ Back', description: `Back to "${item.name}"`, externalUrl: openLink(ctx, item.type, item.id) }] };
     }
-    // A folder's page (or an edit that shows it). Stremio forgets the way back when it opens a
-    // stream-list link, and the Android app shows no pictures there, so this leads to the
-    // folder's poster grid, where both work.
-    if (folder.items.length && settings.discover) {
-      return {
-        streams: [{
-          name: '🖼️ Show as posters',
-          description: `Open the ${folder.items.length === 1 ? 'title' : `${folder.items.length} titles`} in "${folder.name}" as posters.\nTap one to open it; back brings you to the posters again.`,
-          externalUrl: streamLink(ctx, gridPath(folder, ctx))
-        }]
-      };
-    }
-    // Without the grid (folders are left out of Discover): the titles themselves.
+    // A folder's page (or an edit that shows it): its poster grid first, then its titles, one
+    // tap each. Stremio forgets the way back when it opens a stream-list link, and the Android
+    // app shows no pictures there; the grid has both. It's the folder's row in Discover, so
+    // it's left out when folders are.
     if (folder.items.length) {
+      const grid = settings.discover
+        ? [{
+            name: '🖼️ Show as posters',
+            description: `Open the ${folder.items.length === 1 ? 'title' : `${folder.items.length} titles`} in "${folder.name}" as posters.\nTap one to open it; back brings you to the posters again.`,
+            externalUrl: streamLink(ctx, gridPath(folder, ctx))
+          }]
+        : [];
       return {
-        streams: folder.items.map((item) => ({
+        streams: grid.concat(folder.items.map((item) => ({
           name: item.name,
           description: `${TYPE_LABELS[item.type] || item.type} · tap to open`,
           thumbnail: itemPoster(item),
           externalUrl: openLink(ctx, item.type, item.id)
-        }))
+        })))
       };
     }
     return {
