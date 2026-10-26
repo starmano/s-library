@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.13.0 — 2026-10-26
+
+- New "Recent requests from Stremio" section at the bottom of the configure page: it shows which of your Stremio apps reached S-library, what they asked for and how it went, to find out why an app (like a TV) doesn't work.
+
 ## 1.12.1 — 2026-10-26
 
 - Folders open in older Stremio apps too, such as the one on Samsung TVs, instead of loading forever. Open the configure page once so folders in your Library get the fix as well.

@@ -159,7 +159,7 @@ Stremio keeps its own copy of each installed addon's manifest, and Board rows co
 ## Privacy and security
 
 - Your addon link contains your Stremio **auth key** (base64-encoded), because the addon has to read your folders from your account. Treat the link like a password: don't share it. If it leaks, log out of Stremio to invalidate the key, then sign in on the configure page again and reinstall.
-- Signing in and saving go through the addon's server to the Stremio API (`api.strem.io`). Your password is passed on and never stored. The server keeps nothing on disk and doesn't log requests.
+- Signing in and saving go through the addon's server to the Stremio API (`api.strem.io`). Your password is passed on and never stored. The server keeps nothing on disk and writes no logs. In memory it keeps the last 40 requests each account's Stremio apps made (when, which app, what it asked for, how it went; no auth keys or IP addresses), which the configure page shows to that account under **Recent requests from Stremio**, to find out why an app doesn't work. Restarting the server clears them.
 - Sign-in attempts are limited to 10 per minute per IP address.
 - Whoever runs the server can see the auth keys in the addon links it receives. For full control, host S-library yourself.
 

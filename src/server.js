@@ -2,6 +2,7 @@
 'use strict';
 
 const http = require('node:http');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const addon = require('./addon');
@@ -125,9 +126,67 @@ function tooManyLogins(req) {
   return entry.count > LOGIN_LIMIT;
 }
 
+// The last requests each account's Stremio apps made, kept in memory only, so the configure page
+// can show whether (and how) an app reaches the addon. No auth keys or IP addresses are kept.
+const RECENT_MAX = 40;
+const RECENT_ACCOUNTS = 500;
+const recent = new Map();
+
+function accountKey(authKey) {
+  return crypto.createHash('sha256').update(authKey).digest('base64url');
+}
+
+function appName(req) {
+  const agent = req.headers['user-agent'] || '';
+  const [, name] = [
+    [/Tizen|SMART-TV/i, 'Samsung TV'],
+    [/Web0S|webOS|NetCast/i, 'LG TV'],
+    [/AFT[A-Z]|Fire ?TV/i, 'Fire TV'],
+    [/Android TV|GoogleTV|BRAVIA|SHIELD/i, 'Android TV'],
+    [/Android/i, 'Android'],
+    [/iPhone|iPad|iOS/i, 'iPhone / iPad'],
+    [/Windows|Macintosh|X11|Linux/i, 'Computer'],
+    [/./, 'Unknown app']
+  ].find(([pattern]) => pattern.test(agent || '?'));
+  // Apps built from Stremio's web version send an Origin header (see context).
+  return req.headers.origin ? `${name}, web version` : name;
+}
+
+function track(req, res, authKey, what) {
+  const started = Date.now();
+  let done = false;
+  const finish = (result) => {
+    if (done) return;
+    done = true;
+    const key = accountKey(authKey);
+    const list = recent.get(key) || [];
+    list.unshift({
+      at: new Date(started).toISOString(),
+      app: appName(req),
+      userAgent: (req.headers['user-agent'] || '').slice(0, 300),
+      what: what.slice(0, 200),
+      result,
+      ms: Date.now() - started
+    });
+    list.length = Math.min(list.length, RECENT_MAX);
+    recent.delete(key);
+    recent.set(key, list);
+    if (recent.size > RECENT_ACCOUNTS) recent.delete(recent.keys().next().value);
+  };
+  res.on('finish', () => finish(res.statusCode));
+  res.on('close', () => finish('closed before the answer was sent'));
+}
+
+function recentRoute(req, res, [, configSegment]) {
+  const config = decodeConfig(configSegment);
+  if (!config) return sendJson(res, 404, { err: 'Not found' });
+  sendJson(res, 200, { requests: recent.get(accountKey(config.k)) || [] });
+}
+
 async function manifestRoute(req, res, [, configSegment]) {
   const config = configSegment && decodeConfig(configSegment);
   if (!config) return sendJson(res, 200, addon.manifest(null, context(req, configSegment)));
+  track(req, res, config.k, 'manifest');
   // An unreachable Stremio API must not break the addon: fall back to the "All folders" catalog.
   const library = await stremio.getLibrary(config.k).catch(() => ({ folders: [], settings: readSettings([]) }));
   sendJson(res, 200, addon.manifest(library, context(req, configSegment)));
@@ -143,6 +202,7 @@ async function resourceRoute(req, res, [, configSegment, resource, type, rawId, 
     if (resource === 'stream') return sendJson(res, 200, { streams: [] });
     sendJson(res, 404, { err: 'Not found' });
   };
+  if (config) track(req, res, config.k, `${resource} ${type} ${id}${rawExtra ? ` (${decode(rawExtra)})` : ''}`);
   if (!config || (type !== 'folder' && !titles)) return nothing();
   const action = resource === 'meta' && addon.parseAction(id);
   if (action) return sendJson(res, 200, { meta: await actionPageMeta(config.k, configSegment, id, action, ctx) });
@@ -236,6 +296,7 @@ async function actionRoute(req, res, [, configSegment, verb, folderId, rawType, 
       links: [['Back to Stremio', 'stremio:///', true]]
     });
   }
+  track(req, res, config.k, `${verb} ${type} ${id} (page)`);
   try {
     const outcome = await runAction(config.k, { verb, folderId, version: 0, arg: `${type}:${id}` }, ctx);
     const folder = outcome.library.folders.find((f) => f.id === folderId);
@@ -285,6 +346,7 @@ const ROUTES = [
   ['GET', /^\/(?:([\w-]+)\/)?manifest\.json$/, manifestRoute],
   ['GET', /^\/([\w-]+)\/(catalog|meta|stream)\/([^/]+)\/([^/]+?)(?:\/([^/]+))?\.json$/, resourceRoute],
   ['GET', /^\/([\w-]+)\/act\/(add)\/([a-z0-9]+)\/([^/]+)\/([^/]+)$/, actionRoute],
+  ['GET', /^\/([\w-]+)\/recent\.json$/, recentRoute],
   ['POST', /^\/api\/(\w+)$/, proxyRoute]
 ];
 
@@ -304,6 +366,10 @@ function createServer() {
         const match = req.method === method && pathname.match(pattern);
         if (match) return await handler(req, res, match);
       }
+      // Something an app asked for that S-library doesn't know: worth showing too.
+      const [, first, ...rest] = pathname.split('/');
+      const config = rest.length > 0 && decodeConfig(first);
+      if (config) track(req, res, config.k, `unknown request: /${rest.map(decode).join('/')}`);
       sendJson(res, 404, { err: 'Not found' });
     } catch (err) {
       // Paths carry the user's auth key, so only the error message is logged.

@@ -243,5 +243,10 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   await page.waitForSelector('#nowhere:not([hidden])');
   const settings = S.readSettings(api.library.values());
   assert.deepEqual([settings.library, settings.discover, settings.search], [false, false, false]);
+
+  // Recent requests from Stremio apps (here: the page itself, refreshing the installed addon).
+  await page.click('#recent summary');
+  await page.waitForSelector('#recent-list li');
+  assert.match(await page.textContent('#recent-list li'), /manifest → ✓ 200/);
   assert.deepEqual(errors, []);
 });

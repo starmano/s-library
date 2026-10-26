@@ -230,6 +230,21 @@ test("Stremio's own \"Remove from library\" only takes a folder out of the Libra
   await post('/api/datastorePut', { authKey: 'test-auth-key', collection: 'libraryItem', changes: [{ ...fav, removed: false }] });
 });
 
+test('shows each account the requests its Stremio apps made, without auth keys', async () => {
+  const tv = { 'user-agent': 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.5) AppleWebKit/537.36', origin: 'file://' };
+  await fetch(`${base}/${config}/meta/folder/slib%3Afav.json`, { headers: tv });
+  await fetch(`${base}/${config}/meta/folder/slib%3Afav/oddly-shaped/request.json`, { headers: tv });
+  const { body } = await get(`/${config}/recent.json`);
+  assert.deepEqual(body.requests.slice(0, 2).map((r) => [r.app, r.what, r.result]), [
+    ['Samsung TV, web version', 'unknown request: /meta/folder/slib:fav/oddly-shaped/request.json', 404],
+    ['Samsung TV, web version', 'meta folder slib:fav', 200]
+  ]);
+  assert.ok(!JSON.stringify(body).includes('test-auth-key') && !JSON.stringify(body).includes(config));
+  // Other accounts see only their own.
+  assert.deepEqual((await get(`/${S.encodeConfig({ k: 'someone-else' })}/recent.json`)).body.requests, []);
+  assert.equal((await get('/nope/recent.json')).res.status, 404);
+});
+
 test('limits sign-in attempts per client', async () => {
   const headers = { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' };
   const attempt = () => fetch(`${base}/api/login`, { method: 'POST', headers, body: JSON.stringify({ email: 'x', password: 'y' }) });

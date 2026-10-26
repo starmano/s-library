@@ -59,6 +59,15 @@
   main { max-width: 760px; margin: 0 auto; padding: 8px 16px 48px; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-top: 16px; }
   .card > p { margin: 8px 0 0; }
+  .recent { color: var(--text); }
+  .recent summary { display: flex; align-items: center; justify-content: space-between; list-style: none; }
+  .recent summary::-webkit-details-marker { display: none; }
+  .recent summary::after { content: "▾"; color: var(--muted); }
+  .recent[open] summary::after { content: "▴"; }
+  .recent-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
+  .recent-list li { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; overflow-wrap: anywhere; }
+  .recent-list .bad { color: #ff8589; }
+  .recent-list small { display: block; color: var(--muted); font-size: 12px; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .stack { display: grid; gap: 12px; margin-top: 16px; }
   label.field, .field { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
@@ -288,6 +297,14 @@
       </div>
       <p class="note">Your addon link contains your Stremio auth key. Don't share it.</p>
     </section>
+
+    <details id="recent" class="card recent">
+      <summary><h2>Recent requests from Stremio</h2></summary>
+      <p class="note">If S-library doesn't work in one of your Stremio apps, use it there (for example, open a folder), then refresh this list. It shows whether that app reached S-library, what it asked for, and how that went. Newest first; restarting the server clears it.</p>
+      <div class="actions"><button id="recent-refresh" type="button">Refresh</button></div>
+      <p id="recent-empty" class="hint" hidden>No requests from your Stremio apps since the server started.</p>
+      <ul id="recent-list" class="recent-list"></ul>
+    </details>
   </div>
 </main>
 
@@ -1134,6 +1151,27 @@
 
   $('#f-cancel').addEventListener('click', () => editor.close());
   $('#new-folder').addEventListener('click', () => openEditor(null));
+
+  // ---- Recent requests ----
+
+  async function loadRecent() {
+    const res = await fetch('/' + S.encodeConfig({ k: state.authKey }) + '/recent.json', { cache: 'no-store' });
+    const { requests } = await res.json();
+    $('#recent-empty').hidden = requests.length > 0;
+    $('#recent-list').replaceChildren(...requests.map((entry) => {
+      const ok = typeof entry.result === 'number' && entry.result < 400;
+      const result = typeof entry.result === 'number' ? (ok ? '✓ ' : '✕ ') + entry.result : '✕ ' + entry.result;
+      return h('li', null,
+        h('div', null, new Date(entry.at).toLocaleTimeString() + ' · ', h('b', null, entry.app)),
+        h('div', null, entry.what + ' → ', h('span', { class: ok ? null : 'bad' }, result + ' in ' + entry.ms + ' ms')),
+        entry.userAgent ? h('small', null, entry.userAgent) : null);
+    }));
+  }
+
+  $('#recent').addEventListener('toggle', () => {
+    if ($('#recent').open) loadRecent().catch(() => {});
+  });
+  $('#recent-refresh').addEventListener('click', (event) => busy(event.currentTarget, () => loadRecent().catch(() => toast("Couldn't load the requests.", true))));
 
   // ---- Version ----
 
