@@ -12,13 +12,13 @@ A Stremio addon that adds **folders** to your Stremio library. Each folder has a
 | --- | --- |
 | **Library** | A new **Folder** type in the type filter. Every folder shows up as a poster in its color, with its icon and name on it, next to your movies and series. |
 | **Folder page** | Open a folder to see its description, the number of titles, and the titles in it. Click a title to go to it, or **Open as a grid** to browse it as a poster grid. Links on the page rename, describe, recolor, move or delete the folder. |
-| **Board / Discover** | A **📁 S-library** row with all your folders, plus one row per folder, marked with its color: `🔴 Favorites`, `🌸 Watch later`, … |
+| **Board / Discover** | A **📁 S-library** row with all your folders, plus one row per folder, marked with its color: `🔴 Favorites`, `💗 Watch later`, … |
 | **A movie or show** | Its list of streams shows your folders: tap one to add the title to it or take it out, or start a new folder with it. |
 | **Search** | Your folders, and a card to create a folder with that name. |
 
 Switches on the configure page take folders out of the Library, out of Discover (which also removes their rows from the Board, since Stremio shows the same rows in both) or out of search.
 
-Colors: 🔴 red, 🍷 wine, 🌸 pink, 🍑 peach, 🟠 orange, ⭐ gold, 🟡 yellow, 🍏 lime, 🟢 green, 🌿 mint, 💧 sky, 🔵 blue, 🌌 navy, 🟣 purple, 🟤 brown, 🔘 gray, ⚫ black, ⚪ white, or none (📁). Stremio shows row names as plain text, so the emoji is what marks a folder's row; the poster has the real color.
+Colors: 🔴 red, 🟥 wine, 💗 pink, 🟧 peach, 🟠 orange, 🟨 gold, 🟡 yellow, 🟩 lime, 🟢 green, 💚 mint, 🔷 sky, 🔵 blue, 🟦 navy, 🟣 purple, 🟤 brown, 🔘 gray, ⚫ black, ⚪ white, or none (📁). Stremio shows row names as plain text, so a colored emoji shape is what marks a folder's row. Emoji only come in a few colors, so shades such as wine and red share a color and differ in shape; the poster has the exact color.
 
 Icons: 96 to choose from (genres, moods, seasons, sports and more), or none. Each folder's name is required, but you can leave it off the poster.
 

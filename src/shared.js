@@ -29,21 +29,23 @@
 
   // Preset colors. Stremio shows catalog names as plain text, so the emoji is what marks
   // a folder's row on the Board and in Discover; the hex color is used for the artwork.
-  // There are only nine colored circle emoji, so the other colors use something of their color.
+  // Stremio shows row names as plain text, so a colored emoji shape is the only color they can
+  // carry. There are colored circles for nine colors; the other shades get the nearest colored
+  // square, heart or diamond, so every color still has its own mark.
   const COLORS = {
     red: { label: 'Red', hex: '#e5484d', emoji: '🔴' },
-    wine: { label: 'Wine', hex: '#8e2140', emoji: '🍷' },
-    pink: { label: 'Pink', hex: '#e93d82', emoji: '🌸' },
-    peach: { label: 'Peach', hex: '#ff977d', emoji: '🍑' },
+    wine: { label: 'Wine', hex: '#8e2140', emoji: '🟥' },
+    pink: { label: 'Pink', hex: '#e93d82', emoji: '💗' },
+    peach: { label: 'Peach', hex: '#ff977d', emoji: '🟧' },
     orange: { label: 'Orange', hex: '#f76b15', emoji: '🟠' },
-    gold: { label: 'Gold', hex: '#c9a227', emoji: '⭐' },
+    gold: { label: 'Gold', hex: '#c9a227', emoji: '🟨' },
     yellow: { label: 'Yellow', hex: '#ffc53d', emoji: '🟡' },
-    lime: { label: 'Lime', hex: '#8ec63f', emoji: '🍏' },
+    lime: { label: 'Lime', hex: '#8ec63f', emoji: '🟩' },
     green: { label: 'Green', hex: '#30a46c', emoji: '🟢' },
-    mint: { label: 'Mint', hex: '#3cc6a5', emoji: '🌿' },
-    sky: { label: 'Sky', hex: '#3fb6ef', emoji: '💧' },
+    mint: { label: 'Mint', hex: '#3cc6a5', emoji: '💚' },
+    sky: { label: 'Sky', hex: '#3fb6ef', emoji: '🔷' },
     blue: { label: 'Blue', hex: '#3e63dd', emoji: '🔵' },
-    navy: { label: 'Navy', hex: '#273a7a', emoji: '🌌' },
+    navy: { label: 'Navy', hex: '#273a7a', emoji: '🟦' },
     purple: { label: 'Purple', hex: '#8e4ec6', emoji: '🟣' },
     brown: { label: 'Brown', hex: '#a18072', emoji: '🟤' },
     gray: { label: 'Gray', hex: '#9b9ca6', emoji: '🔘' },

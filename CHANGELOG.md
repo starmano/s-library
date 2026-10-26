@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.5.1 — 2026-10-26
+
+- Rows for the newer colors are marked with plain colored shapes instead of pictures: 🟥 wine, 💗 pink, 🟧 peach, 🟨 gold, 🟩 lime, 💚 mint, 🔷 sky and 🟦 navy.
+
 ## 1.5.0 — 2026-10-26
 
 - New switches on the configure page: show folders in Discover (and on the Board), and show folders in search.
