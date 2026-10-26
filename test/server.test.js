@@ -65,6 +65,19 @@ test('serves the configure page with and without a config', async () => {
   assert.match((await get('/shared.js')).body.toString(), /SLibrary/);
 });
 
+test('reports the running version and what changed, kept in step with package.json', async () => {
+  const { body } = await get('/version.json');
+  assert.equal(body.version, require('../package.json').version);
+  assert.equal(body.changes[0].version, body.version, 'CHANGELOG.md starts with the current version');
+  for (const entry of body.changes) {
+    assert.match(entry.version, /^\d+\.\d+\.\d+$/);
+    assert.match(entry.date, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(entry.changes.length > 0, `${entry.version} lists its changes`);
+  }
+  const manifest = await get('/manifest.json');
+  assert.equal(manifest.body.version, body.version);
+});
+
 test('base manifest requires configuration', async () => {
   const { res, body } = await get('/manifest.json');
   assert.equal(res.headers.get('access-control-allow-origin'), '*');

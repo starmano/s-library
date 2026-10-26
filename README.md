@@ -25,6 +25,8 @@ Colors: 🔴 red, 🟠 orange, 🟡 yellow, 🟢 green, 🔵 blue, 🟣 purple, 
 
 To change folders later, use **Configure** on S-library in Stremio's addon list, or open the configure page again. Changes reach Stremio the next time you open it or switch back to its window.
 
+The version the server runs is shown next to the title on the configure page, with a short note on what changed. The notes open by themselves the first time you see a new version.
+
 Removing a folder from your library inside Stremio deletes the folder. The titles in it are not touched.
 
 ## Running it
@@ -84,6 +86,8 @@ Instead of uploading files, let cPanel pull them from GitHub:
 
 Run the tests with `npm test`. The configure-page test runs only when Playwright is installed and is skipped otherwise.
 
+To release a new version, raise `version` in `package.json` and add a section for it at the top of `CHANGELOG.md`. The configure page and the manifest show it, and a test fails if the two don't match.
+
 ## How it works
 
 Stremio doesn't let addons change its interface, but its library accepts any content type. S-library stores folders as items in your own Stremio library. Stremio's servers keep only the fields Stremio itself uses and drop anything extra, so every part of a folder is a plain library item:
@@ -119,6 +123,7 @@ Stremio keeps its own copy of each installed addon's manifest, and Board rows co
 | `src/font.js` | Reads the bundled font and draws text for the posters |
 | `fonts/` | Plus Jakarta Sans ExtraBold (Latin letters only) and its license |
 | `public/configure.html` | Configure page (HTML, CSS and JavaScript in one file) |
+| `CHANGELOG.md` | What changed in each version, shown on the configure page |
 
 ## Privacy and security
 

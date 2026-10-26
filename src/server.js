@@ -8,10 +8,27 @@ const addon = require('./addon');
 const stremio = require('./stremio-api');
 const { image } = require('./images');
 const { decodeConfig } = require('./shared');
+const { version } = require('../package.json');
+
+// CHANGELOG.md sections: a "## 1.2.0 — 2026-10-26" heading followed by "- change" lines.
+function parseChangelog(text) {
+  const entries = [];
+  for (const line of text.split(/\r?\n/)) {
+    const heading = /^##\s+(\d+\.\d+\.\d+)(?:\s+[—–-]\s+(\d{4}-\d{2}-\d{2}))?/.exec(line);
+    if (heading) entries.push({ version: heading[1], date: heading[2] || null, changes: [] });
+    else if (entries.length && /^[-*]\s+/.test(line)) entries[entries.length - 1].changes.push(line.replace(/^[-*]\s+/, '').trim());
+  }
+  return entries;
+}
 
 const FILES = {
   configure: fs.readFileSync(path.join(__dirname, '..', 'public', 'configure.html')),
-  shared: fs.readFileSync(path.join(__dirname, 'shared.js'))
+  shared: fs.readFileSync(path.join(__dirname, 'shared.js')),
+  // The running version and what changed, shown on the configure page.
+  version: JSON.stringify({
+    version,
+    changes: parseChangelog(fs.readFileSync(path.join(__dirname, '..', 'CHANGELOG.md'), 'utf8'))
+  })
 };
 
 // Stremio API calls the configure page may make through this server.
@@ -144,6 +161,7 @@ const ROUTES = [
   ['GET', /^\/$/, (req, res) => res.writeHead(302, { location: '/configure' }).end()],
   ['GET', /^\/(?:[\w-]+\/)?configure\/?$/, (req, res) => send(res, 200, FILES.configure, 'text/html; charset=utf-8')],
   ['GET', /^\/shared\.js$/, (req, res) => send(res, 200, FILES.shared, 'text/javascript; charset=utf-8')],
+  ['GET', /^\/version\.json$/, (req, res) => send(res, 200, FILES.version, 'application/json; charset=utf-8')],
   ['GET', /^\/img\/(logo)\.png$/, imageRoute],
   ['GET', /^\/img\/(poster|bg)\/([a-z]+)\.png$/, imageRoute],
   ['GET', /^\/(?:([\w-]+)\/)?manifest\.json$/, manifestRoute],
