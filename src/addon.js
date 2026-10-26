@@ -71,11 +71,19 @@ function detailLink(type, id) {
   return `stremio:///detail/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
 }
 
-// A title's page, from a stream-list entry. Stremio Web opens those in a new tab, where a
-// "stremio:" link does nothing, so it gets the title's page on Stremio Web instead.
+// A page in Stremio, from a stream-list entry. Stremio Web opens those in a new tab, where a
+// "stremio:" link does nothing, so it gets the page on Stremio Web instead.
+function streamLink(ctx, path) {
+  return ctx.native ? `stremio:///${path}` : `https://web.stremio.com/#/${path}`;
+}
+
 function openLink(ctx, type, id) {
-  if (ctx.native) return detailLink(type, id);
-  return `https://web.stremio.com/#/detail/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
+  return streamLink(ctx, `detail/${encodeURIComponent(type)}/${encodeURIComponent(id)}`);
+}
+
+// A folder as a poster grid: its row in Discover. Titles opened there go back to the grid.
+function gridPath(folder, ctx) {
+  return `discover/${encodeURIComponent(ctx.manifestUrl)}/${TYPE}/${FOLDER_CATALOG_PREFIX}${folder.id}`;
 }
 
 // A page inside Stremio: a folder, or an action.
@@ -240,10 +248,7 @@ function folderMeta(folder, { folders, settings }, ctx) {
   return {
     ...folderPreview(folder, ctx),
     links: [
-      // The grid is the folder's row in Discover.
-      ...(settings.discover
-        ? [link('Folder', 'Open as a grid', `stremio:///discover/${encodeURIComponent(ctx.manifestUrl)}/${TYPE}/${FOLDER_CATALOG_PREFIX}${folder.id}`)]
-        : []),
+      ...(settings.discover ? [link('Folder', '🖼️ Show as posters', `stremio:///${gridPath(folder, ctx)}`)] : []),
       link('Folder', 'Rename', searchLink(`rename ${folder.name}: `)),
       link('Folder', 'Description', searchLink(`describe ${folder.name}: `)),
       ...(index > 0 ? [link('Folder', 'Move up', edit('up'))] : []),
@@ -258,8 +263,8 @@ function folderMeta(folder, { folders, settings }, ctx) {
       ...folder.items.map((item) => link('In this folder', item.name, detailLink(item.type, item.id))),
       ...generalLinks(settings, ctx, `${ctx.configureUrl}#folder=${folder.id}`)
     ]
-    // No videos: Stremio then shows the page's stream list right away, and that lists the
-    // folder's titles (see stream), so one tap opens a title.
+    // No videos: Stremio then shows the page's stream list right away, which leads to the
+    // folder's poster grid (see stream).
   };
 }
 
@@ -338,7 +343,7 @@ function actionLink(ctx, verb, folderId, type, id) {
   return `${ctx.actionUrl}/${verb}/${folderId}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
 }
 
-function stream(folders, type, id, ctx) {
+function stream({ folders, settings }, type, id, ctx) {
   if (!id.startsWith(ID_PREFIX)) {
     if (!TITLE_TYPES.includes(type)) return { streams: [] };
     // Any movie or show: one tap adds it to a folder, or starts a new folder with it.
@@ -371,7 +376,19 @@ function stream(folders, type, id, ctx) {
       if (!item) return { streams: [] };
       return { streams: [{ name: '◀ Back', description: `Back to "${item.name}"`, externalUrl: openLink(ctx, item.type, item.id) }] };
     }
-    // A folder's page (or an edit that shows it): its titles, each opened with one tap.
+    // A folder's page (or an edit that shows it). Stremio forgets the way back when it opens a
+    // stream-list link, and the Android app shows no pictures there, so this leads to the
+    // folder's poster grid, where both work.
+    if (folder.items.length && settings.discover) {
+      return {
+        streams: [{
+          name: '🖼️ Show as posters',
+          description: `Open the ${folder.items.length === 1 ? 'title' : `${folder.items.length} titles`} in "${folder.name}" as posters.\nTap one to open it; back brings you to the posters again.`,
+          externalUrl: streamLink(ctx, gridPath(folder, ctx))
+        }]
+      };
+    }
+    // Without the grid (folders are left out of Discover): the titles themselves.
     if (folder.items.length) {
       return {
         streams: folder.items.map((item) => ({

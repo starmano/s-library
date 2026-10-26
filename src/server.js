@@ -154,7 +154,7 @@ async function resourceRoute(req, res, [, configSegment, resource, type, rawId, 
     const extra = Object.fromEntries(new URLSearchParams(rawExtra || ''));
     return sendJson(res, 200, addon.catalog(library, id, extra, ctx));
   }
-  if (resource === 'stream') return sendJson(res, 200, addon.stream(library.folders, type, id, ctx));
+  if (resource === 'stream') return sendJson(res, 200, addon.stream(library, type, id, ctx));
   const meta = addon.meta(library, id, ctx);
   sendJson(res, meta ? 200 : 404, meta ? { meta } : { err: 'Folder not found' });
 }

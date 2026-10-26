@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.9.0 — 2026-10-26
+
+- A folder's page leads to the folder as posters ("🖼️ Show as posters"). Tap a poster to open the title; back brings you to the posters again.
+
 ## 1.8.0 — 2026-10-26
 
 - A folder's page lists its titles with their posters, and one tap opens a title, without an "Open title" step in between.

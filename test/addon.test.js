@@ -61,7 +61,7 @@ test('configured manifest has one catalog per folder, marked with its color', ()
 test('folders can be left out of Discover (and the Board) and out of search', () => {
   const off = { folders, settings: { ...settings, discover: false, search: false } };
   assert.deepEqual(addon.manifest(off, ctx).catalogs.map((c) => c.id), ['slib.search'], 'search commands keep working');
-  assert.ok(!addon.meta(off, 'slib:fav', ctx).links.some((l) => l.name === 'Open as a grid'));
+  assert.ok(!addon.meta(off, 'slib:fav', ctx).links.some((l) => l.name === '🖼️ Show as posters'));
   assert.deepEqual(addon.catalog(off, 'slib.search', { search: 'fav' }, ctx).metas, []);
   assert.match(addon.catalog(off, 'slib.search', { search: 'new folder: Road trip' }, ctx).metas[0].id, /^slib:do:new:/);
   assert.match(addon.catalog(off, 'slib.search', { search: 'rename Favorites: Best' }, ctx).metas[0].id, /^slib:do:rename:fav:5:/);
@@ -112,7 +112,7 @@ test('folder meta has description and links to its titles', () => {
   assert.equal(meta.name, 'Favorites');
   assert.equal(meta.description, 'The best ones');
   assert.deepEqual(meta.links[0], {
-    name: 'Open as a grid',
+    name: '🖼️ Show as posters',
     category: 'Folder',
     url: `stremio:///discover/${encodeURIComponent(ctx.manifestUrl)}/folder/slib.fav`
   });
@@ -124,32 +124,43 @@ test('folder meta has description and links to its titles', () => {
 });
 
 test("a title's stream list offers every folder, and a new one", () => {
-  assert.deepEqual(addon.stream(folders, 'movie', 'tt0133093', ctx).streams, [
+  assert.deepEqual(addon.stream(library, 'movie', 'tt0133093', ctx).streams, [
     { name: '🔴 Favorites', description: '✓ Already in this folder', externalUrl: 'https://addon.test/cfg/act/add/fav/movie/tt0133093' },
     { name: '📁 Watch later', description: '＋ Tap to add it to this folder', externalUrl: 'https://addon.test/cfg/act/add/later/movie/tt0133093' },
     { name: '📁 New folder', description: '＋ Tap to create a new folder with this title in it', externalUrl: 'https://addon.test/cfg/configure#new=movie%3Att0133093' }
   ]);
   // Episodes act on their show.
-  const episode = addon.stream(folders, 'series', 'kitsu:1:5', ctx).streams;
+  const episode = addon.stream(library, 'series', 'kitsu:1:5', ctx).streams;
   assert.equal(episode[0].externalUrl, 'https://addon.test/cfg/act/add/fav/series/kitsu%3A1');
-  assert.equal(addon.stream([], 'series', 'tt0944947:1:1', ctx).streams[0].externalUrl, 'https://addon.test/cfg/configure#new=series%3Att0944947');
+  assert.equal(addon.stream({ folders: [], settings }, 'series', 'tt0944947:1:1', ctx).streams[0].externalUrl, 'https://addon.test/cfg/configure#new=series%3Att0944947');
 });
 
-test("a folder's page lists its titles, and one tap opens one", () => {
+test("a folder's page leads to its poster grid", () => {
   const native = { ...ctx, native: true };
-  assert.deepEqual(addon.stream(folders, 'folder', 'slib:fav', native).streams, [
+  const grid = `discover/${encodeURIComponent(ctx.manifestUrl)}/folder/slib.fav`;
+  assert.deepEqual(addon.stream(library, 'folder', 'slib:fav', native).streams, [{
+    name: '🖼️ Show as posters',
+    description: 'Open the 2 titles in "Favorites" as posters.\nTap one to open it; back brings you to the posters again.',
+    externalUrl: `stremio:///${grid}`
+  }]);
+  // Stremio Web opens stream entries in a new tab, so it gets Stremio Web's address.
+  assert.equal(addon.stream(library, 'folder', 'slib:fav', ctx).streams[0].externalUrl, `https://web.stremio.com/#/${grid}`);
+  // The same on a page an edit opens.
+  assert.equal(addon.stream(library, 'folder', 'slib:do:color:fav:5:red', native).streams[0].name, '🖼️ Show as posters');
+
+  // Without the grid (folders left out of Discover), the titles themselves, one tap each.
+  const noGrid = { folders, settings: { ...settings, discover: false } };
+  assert.deepEqual(addon.stream(noGrid, 'folder', 'slib:fav', native).streams, [
     { name: 'The Matrix', description: 'Movie · tap to open', thumbnail: 'https://images.metahub.space/poster/medium/tt0133093/img', externalUrl: 'stremio:///detail/movie/tt0133093' },
     { name: 'Cowboy Bebop', description: 'Series · tap to open', thumbnail: 'https://example.com/bebop.jpg', externalUrl: 'stremio:///detail/series/kitsu%3A1' }
   ]);
-  // Stremio Web opens these in a new tab, so they lead to Stremio Web.
-  assert.equal(addon.stream(folders, 'folder', 'slib:fav', ctx).streams[0].externalUrl, 'https://web.stremio.com/#/detail/movie/tt0133093');
-  // The same list on a page an edit opens.
-  assert.equal(addon.stream(folders, 'folder', 'slib:do:color:fav:5:red', native).streams.length, 2);
+  assert.equal(addon.stream(noGrid, 'folder', 'slib:fav', ctx).streams[0].externalUrl, 'https://web.stremio.com/#/detail/movie/tt0133093');
+
   // Links from folder pages of earlier versions still open the title.
-  assert.equal(addon.stream(folders, 'folder', 'slib:fav:series:kitsu:1', native).streams[0].externalUrl, 'stremio:///detail/series/kitsu%3A1');
+  assert.equal(addon.stream(library, 'folder', 'slib:fav:series:kitsu:1', native).streams[0].externalUrl, 'stremio:///detail/series/kitsu%3A1');
   // An empty folder's page explains how to fill it.
-  assert.match(addon.stream(folders, 'folder', 'slib:later', ctx).streams[0].description, /folder is empty/);
-  assert.deepEqual(addon.stream(folders, 'folder', 'slib:missing', ctx).streams, []);
+  assert.match(addon.stream(library, 'folder', 'slib:later', ctx).streams[0].description, /folder is empty/);
+  assert.deepEqual(addon.stream(library, 'folder', 'slib:missing', ctx).streams, []);
 });
 
 test('episode ids map to their show', () => {
