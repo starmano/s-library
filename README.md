@@ -79,10 +79,12 @@ Instead of uploading files, let cPanel pull them from GitHub:
 3. Under **Advanced → Cron Jobs**, add a job that runs every 15 minutes (`*/15 * * * *`) with this command. It pulls new commits and restarts the app only when something changed:
 
    ```sh
-   cd ~/s-library-app && OLD=$(git rev-parse HEAD) && git pull -q --ff-only && [ "$(git rev-parse HEAD)" != "$OLD" ] && { mkdir -p tmp; touch tmp/restart.txt; cloudlinux-selector restart --json --interpreter nodejs --app-root s-library-app >/dev/null 2>&1; }
+   cd ~/s-library-app && OLD=$(git rev-parse HEAD) && git pull -q --ff-only && [ "$(git rev-parse HEAD)" != "$OLD" ] && { mkdir -p tmp; touch tmp/restart.txt; cloudlinux-selector restart --json --interpreter nodejs --app-root s-library-app >/dev/null 2>&1 || pkill -u "$(id -un)" -f "lsnode|NodeApp|node app\.js"; }
    ```
 
-   `tmp/restart.txt` is how Passenger and LiteSpeed restart an app; `cloudlinux-selector` does the same on CloudLinux servers. Whichever your server doesn't use is ignored.
+   Use your app's **Application root** in place of `s-library-app` (both times). `tmp/restart.txt` is how Passenger and LiteSpeed restart an app, and `cloudlinux-selector` does the same on CloudLinux servers. If that command fails, the job stops the running app instead, and the server starts it again, with the new code, on the next visit.
+
+   To check which folder the domain really runs, look for `PassengerAppRoot` in the `.htaccess` file of the domain's document root.
 
 Run the tests with `npm test`. The configure-page test runs only when Playwright is installed and is skipped otherwise.
 
