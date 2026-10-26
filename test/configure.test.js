@@ -39,13 +39,13 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   const errors = [];
   page.on('pageerror', (err) => errors.push(err.message));
   // A stand-in for Cinemeta: title details (with genres), genre lists (most popular first) and search.
-  const movie = (id, name, popularity) => ({ id, type: 'movie', name, popularity });
+  const movie = (id, name, popularity, imdbRating, releaseInfo) => ({ id, type: 'movie', name, popularity, imdbRating, releaseInfo });
   const cinemetaApi = {
     '/meta/movie/tt0133093.json': { meta: { id: 'tt0133093', genres: ['Action', 'Sci-Fi'] } },
     '/meta/movie/tt1375666.json': { meta: { id: 'tt1375666', genres: ['Action', 'Adventure', 'Sci-Fi'] } },
-    '/catalog/movie/top/genre=Action.json': { metas: [movie('tt1375666', 'Inception', 90), movie('tt0468569', 'The Dark Knight', 50), movie('tt2911666', 'John Wick', 30)] },
-    '/catalog/movie/top/genre=Sci-Fi.json': { metas: [movie('tt0816692', 'Interstellar', 60), movie('tt1160419', 'Dune', 40)] },
-    '/catalog/movie/top/genre=Adventure.json': { metas: [movie('tt0816692', 'Interstellar', 60), movie('tt1160419', 'Dune', 40)] },
+    '/catalog/movie/top/genre=Action.json': { metas: [movie('tt1375666', 'Inception', 90, '8.8', '2010'), movie('tt0468569', 'The Dark Knight', 50, '9.0', '2008'), movie('tt2911666', 'John Wick', 30, '7.4', '2014')] },
+    '/catalog/movie/top/genre=Sci-Fi.json': { metas: [movie('tt0816692', 'Interstellar', 60, '8.7', '2014'), movie('tt1160419', 'Dune', 40, '8.0', '2021')] },
+    '/catalog/movie/top/genre=Adventure.json': { metas: [movie('tt0816692', 'Interstellar', 60, '8.7', '2014'), movie('tt1160419', 'Dune', 40, '8.0', '2021')] },
     '/catalog/movie/top/search=incep.json': { metas: [{ id: 'tt1375666', type: 'movie', name: 'Inception', releaseInfo: '2010' }] }
   };
   await page.route('https://v3-cinemeta.strem.io/**', (route) => {
@@ -118,6 +118,14 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   assert.equal(await page.locator('#f-results li').count(), 0);
   for (const genre of ['Action', 'Sci-Fi', 'Adventure']) await page.click(`#f-genres .genre:has-text("${genre}")`);
   await page.waitForFunction(() => document.querySelectorAll('#f-results li').length === 4);
+  assert.deepEqual(await recommended(), ['Interstellar', 'The Dark Knight', 'Dune', 'John Wick']);
+  // Sorted by rating or by year instead.
+  await page.click('#f-sorts .sort:has-text("Best rated")');
+  assert.deepEqual(await recommended(), ['The Dark Knight', 'Interstellar', 'Dune', 'John Wick']);
+  assert.match(await page.textContent('#f-results li:has-text("The Dark Knight") small'), /2008 · ★ 9\.0/);
+  await page.click('#f-sorts .sort:has-text("Newest")');
+  assert.deepEqual(await recommended(), ['Dune', 'Interstellar', 'John Wick', 'The Dark Knight']);
+  await page.click('#f-sorts .sort:has-text("Most popular")');
   assert.deepEqual(await recommended(), ['Interstellar', 'The Dark Knight', 'Dune', 'John Wick']);
   await page.click('#f-results li:has-text("Interstellar") button');
   await page.click('#f-save');

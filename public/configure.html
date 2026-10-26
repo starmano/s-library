@@ -182,6 +182,10 @@
   .genre { padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: 500; }
   .genre[aria-pressed="true"] { background: rgb(123 91 245 / .22); border-color: var(--accent); }
   .genre[aria-pressed="false"] { color: var(--muted); border-style: dashed; }
+  .sorts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 400; font-size: 14px; }
+  .sorts > span { color: var(--muted); }
+  .sort { padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: 500; }
+  .sort[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
 
   #toast {
     position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
@@ -330,6 +334,7 @@
           <button type="button" role="tab" data-source="recommended" aria-selected="false">Recommended</button>
         </div>
         <input id="f-query" type="search" aria-label="Find titles" autocomplete="off">
+        <div id="f-sorts" class="sorts" hidden><span>Sort:</span></div>
         <div id="f-genres" class="genres" hidden></div>
         <p id="f-results-hint" class="hint" hidden></p>
         <ul id="f-results" class="results"></ul>
@@ -367,6 +372,7 @@
     recommendations: [],
     genreChoices: [],      // the folder's main genres, which recommendations come from
     genresOff: new Set(),  // ... except these, left out by the user
+    recommendSort: 'popular',
     recommendFrom: 0,      // how many titles the recommendations are based on
     recommending: false,
     recommendSeq: 0
@@ -877,13 +883,13 @@
       else if (!results.length) hint = 'No matches in your library.';
       else if (results.length > RESULTS_SHOWN) hint = 'Showing ' + RESULTS_SHOWN + ' of ' + results.length + '. Type to narrow it down.';
     } else if (state.source === 'recommended') {
-      results = query ? state.recommendations.filter((t) => t.name.toLowerCase().includes(query)) : state.recommendations;
+      results = sortRecommendations(query ? state.recommendations.filter((t) => t.name.toLowerCase().includes(query)) : state.recommendations);
       if (state.recommending) hint = 'Finding recommendations…';
       else if (!state.recommendFrom) hint = "Add a few movies or shows first: recommendations are based on what's in this folder.";
       else if (state.genreChoices.length && state.genreChoices.every((genre) => state.genresOff.has(genre))) hint = 'Every genre is left out. Tap one to use it again.';
       else if (!state.recommendations.length) hint = 'No recommendations found.';
       else if (!results.length) hint = 'No matches.';
-      else hint = 'Popular titles in the genres of this folder, most popular first. Tap a genre to leave it out.';
+      else hint = 'Popular titles in the genres of this folder, ' + SORTS[state.recommendSort].hint + ' first. Tap a genre to leave it out.';
     } else {
       results = state.searchResults;
       if (!query) hint = 'Type a title to search Stremio.';
@@ -894,13 +900,46 @@
       const added = hasItem(title.id);
       return h('li', null,
         thumb(title.poster, 'thumb'),
-        h('div', { class: 'title', title: title.name }, title.name, h('small', null, title.type + (title.year ? ' · ' + title.year : ''))),
+        h('div', { class: 'title', title: title.name }, title.name,
+          h('small', null, [title.type, title.year, title.rating ? '★ ' + title.rating : ''].filter(Boolean).join(' · '))),
         h('button', { type: 'button', 'aria-pressed': String(added), onclick: () => toggleItem(title) }, added ? '✓ Added' : '+ Add')
       );
     }));
     $('#f-results-hint').textContent = hint;
     $('#f-results-hint').hidden = !hint;
     renderGenres();
+    renderSorts();
+  }
+
+  // How recommendations are ordered. They arrive most popular first; the others keep that order
+  // among equals, and put titles without a rating or year last.
+  const SORTS = {
+    popular: { label: 'Most popular', hint: 'most popular' },
+    rating: { label: 'Best rated', hint: 'best rated', key: (title) => parseFloat(title.rating) },
+    year: { label: 'Newest', hint: 'newest', key: (title) => parseInt(/\d{4}/.exec(title.year || '') || '', 10) }
+  };
+
+  function sortRecommendations(titles) {
+    const { key } = SORTS[state.recommendSort];
+    if (!key) return titles;
+    const value = (title) => (Number.isFinite(key(title)) ? key(title) : -Infinity);
+    return titles.map((title, index) => ({ title, index }))
+      .sort((a, b) => value(b.title) - value(a.title) || a.index - b.index)
+      .map(({ title }) => title);
+  }
+
+  function renderSorts() {
+    const box = $('#f-sorts');
+    box.hidden = state.source !== 'recommended' || !state.recommendations.length;
+    box.replaceChildren(h('span', null, 'Sort:'), ...Object.entries(SORTS).map(([key, sort]) => h('button', {
+      type: 'button',
+      class: 'sort',
+      'aria-pressed': String(key === state.recommendSort),
+      onclick: () => {
+        state.recommendSort = key;
+        renderResults();
+      }
+    }, sort.label)));
   }
 
   // The genres recommendations come from, each one a button that leaves it out or uses it again.
@@ -1031,7 +1070,14 @@
     if (picks.length < 12) picks = Array.from(found.values());
     const popularity = picks.every((entry) => typeof entry.meta.popularity === 'number');
     picks.sort((a, b) => (popularity ? b.meta.popularity - a.meta.popularity : a.rank - b.rank));
-    state.recommendations = picks.map(({ meta, type }) => ({ id: meta.id, type, name: meta.name, poster: meta.poster, year: meta.releaseInfo }));
+    state.recommendations = picks.map(({ meta, type }) => ({
+      id: meta.id,
+      type,
+      name: meta.name,
+      poster: meta.poster,
+      year: meta.releaseInfo || (meta.year ? String(meta.year) : undefined),
+      rating: meta.imdbRating && Number.isFinite(parseFloat(meta.imdbRating)) ? String(meta.imdbRating) : undefined
+    }));
     state.genreChoices = choices;
     state.recommending = false;
     renderResults();
