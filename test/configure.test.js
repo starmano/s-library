@@ -104,7 +104,21 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
   await page.waitForFunction(() => document.querySelectorAll('#f-results li').length === 4);
   assert.deepEqual(await page.locator('#f-results .title').evaluateAll((titles) => titles.map((t) => t.firstChild.textContent)),
     ['Interstellar', 'The Dark Knight', 'Dune', 'John Wick']);
-  assert.match(await page.textContent('#f-results-hint'), /Popular in Action, Sci-Fi and Adventure/);
+  // The genres they come from, each of which can be left out, and used again.
+  const genres = () => page.locator('#f-genres .genre').allTextContents();
+  assert.deepEqual(await genres(), ['Action ✕', 'Sci-Fi ✕', 'Adventure ✕']);
+  const recommended = () => page.locator('#f-results .title').evaluateAll((titles) => titles.map((t) => t.firstChild.textContent));
+  await page.click('#f-genres .genre:has-text("Sci-Fi")');
+  await page.click('#f-genres .genre:has-text("Adventure")');
+  await page.waitForFunction(() => document.querySelectorAll('#f-results li').length === 2);
+  assert.deepEqual(await recommended(), ['The Dark Knight', 'John Wick']);
+  assert.deepEqual(await genres(), ['Action ✕', '+ Sci-Fi', '+ Adventure']);
+  await page.click('#f-genres .genre:has-text("Action")');
+  await page.waitForSelector('#f-results-hint:has-text("Every genre is left out")');
+  assert.equal(await page.locator('#f-results li').count(), 0);
+  for (const genre of ['Action', 'Sci-Fi', 'Adventure']) await page.click(`#f-genres .genre:has-text("${genre}")`);
+  await page.waitForFunction(() => document.querySelectorAll('#f-results li').length === 4);
+  assert.deepEqual(await recommended(), ['Interstellar', 'The Dark Knight', 'Dune', 'John Wick']);
   await page.click('#f-results li:has-text("Interstellar") button');
   await page.click('#f-save');
   await page.waitForSelector('.folder');

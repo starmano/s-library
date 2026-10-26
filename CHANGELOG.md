@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.11.0 — 2026-10-26
+
+- The Recommended tab shows the genres its titles come from. Tap a genre to leave it out, or tap it again to use it again; each folder remembers its choice in this browser.
+
 ## 1.10.0 — 2026-10-26
 
 - A folder's page lists its titles again, below "🖼️ Show as posters". One tap on a title opens it.

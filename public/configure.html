@@ -177,6 +177,11 @@
   .results small { display: block; color: var(--muted); text-transform: capitalize; }
   .results button[aria-pressed="true"] { background: none; color: var(--muted); }
   .hint { color: var(--muted); font-weight: 400; font-size: 14px; margin: 0; }
+  .genres { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 400; font-size: 14px; }
+  .genres > span { color: var(--muted); }
+  .genre { padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: 500; }
+  .genre[aria-pressed="true"] { background: rgb(123 91 245 / .22); border-color: var(--accent); }
+  .genre[aria-pressed="false"] { color: var(--muted); border-style: dashed; }
 
   #toast {
     position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
@@ -325,6 +330,7 @@
           <button type="button" role="tab" data-source="recommended" aria-selected="false">Recommended</button>
         </div>
         <input id="f-query" type="search" aria-label="Find titles" autocomplete="off">
+        <div id="f-genres" class="genres" hidden></div>
         <p id="f-results-hint" class="hint" hidden></p>
         <ul id="f-results" class="results"></ul>
       </div>
@@ -359,7 +365,8 @@
     searching: false,
     searchSeq: 0,
     recommendations: [],
-    recommendGenres: [],
+    genreChoices: [],      // the folder's main genres, which recommendations come from
+    genresOff: new Set(),  // ... except these, left out by the user
     recommendFrom: 0,      // how many titles the recommendations are based on
     recommending: false,
     recommendSeq: 0
@@ -799,6 +806,8 @@
     updatePreview();
     $('#f-delete').hidden = !folder;
     $('#f-query').value = '';
+    state.genreChoices = [];
+    state.genresOff = new Set(readGenresOff(state.draft.id));
     setSource('library');
     renderPicked();
     editor.showModal();
@@ -871,9 +880,10 @@
       results = query ? state.recommendations.filter((t) => t.name.toLowerCase().includes(query)) : state.recommendations;
       if (state.recommending) hint = 'Finding recommendations…';
       else if (!state.recommendFrom) hint = "Add a few movies or shows first: recommendations are based on what's in this folder.";
+      else if (state.genreChoices.length && state.genreChoices.every((genre) => state.genresOff.has(genre))) hint = 'Every genre is left out. Tap one to use it again.';
       else if (!state.recommendations.length) hint = 'No recommendations found.';
       else if (!results.length) hint = 'No matches.';
-      else hint = 'Popular in ' + listText(state.recommendGenres) + ', like the titles in this folder. Most popular first.';
+      else hint = 'Popular titles in the genres of this folder, most popular first. Tap a genre to leave it out.';
     } else {
       results = state.searchResults;
       if (!query) hint = 'Type a title to search Stremio.';
@@ -890,6 +900,49 @@
     }));
     $('#f-results-hint').textContent = hint;
     $('#f-results-hint').hidden = !hint;
+    renderGenres();
+  }
+
+  // The genres recommendations come from, each one a button that leaves it out or uses it again.
+  function renderGenres() {
+    const box = $('#f-genres');
+    box.hidden = state.source !== 'recommended' || !state.genreChoices.length;
+    box.replaceChildren(h('span', null, 'Genres:'), ...state.genreChoices.map((genre) => {
+      const on = !state.genresOff.has(genre);
+      return h('button', {
+        type: 'button',
+        class: 'genre',
+        'aria-pressed': String(on),
+        title: on ? 'Leave ' + genre + ' out' : 'Use ' + genre + ' again',
+        onclick: () => toggleGenre(genre)
+      }, on ? genre + ' ✕' : '+ ' + genre);
+    }));
+  }
+
+  function toggleGenre(genre) {
+    if (state.genresOff.has(genre)) state.genresOff.delete(genre);
+    else state.genresOff.add(genre);
+    saveGenresOff(state.draft.id, Array.from(state.genresOff));
+    recommend();
+  }
+
+  // Left-out genres are remembered per folder, in this browser only.
+  function readGenresOff(folderId) {
+    try {
+      const list = JSON.parse(localStorage.getItem('slibrary-genres-off:' + folderId) || '[]');
+      return Array.isArray(list) ? list.filter((genre) => typeof genre === 'string') : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveGenresOff(folderId, genres) {
+    try {
+      if (genres.length) localStorage.setItem('slibrary-genres-off:' + folderId, JSON.stringify(genres));
+      else localStorage.removeItem('slibrary-genres-off:' + folderId);
+    } catch (_) {
+      // Private browsing: remembered until the editor closes.
+    }
   }
 
   // Search goes straight to Cinemeta, Stremio's official catalog addon.
@@ -916,13 +969,10 @@
     renderResults();
   }
 
-  function listText(words) {
-    return words.length > 1 ? words.slice(0, -1).join(', ') + ' and ' + words[words.length - 1] : words.join('');
-  }
-
   // Recommendations: popular titles that share genres with the titles in the folder. Cinemeta
   // has a list per genre, sorted by popularity. A title must be in the lists of at least two of
   // the folder's main genres (or one, if that leaves too few), and the most popular come first.
+  // Genres the user left out are skipped.
   const RECOMMEND_FROM = 30;   // most recently added titles to look at
   const cinemetaCache = new Map();
 
@@ -943,7 +993,6 @@
       .filter((item) => /^tt\d+$/.test(item.id) && (item.type === 'movie' || item.type === 'series'))
       .slice(-RECOMMEND_FROM);
     state.recommendations = [];
-    state.recommendGenres = [];
     state.recommendFrom = sources.length;
     state.recommending = sources.length > 0;
     renderResults();
@@ -957,9 +1006,12 @@
       if (Array.isArray(list)) list.forEach((genre) => counts.set(genre, (counts.get(genre) || 0) + 1));
     });
     const lists = [];
+    const choices = [];
     for (const type of ['movie', 'series']) {
       const top = Array.from(genres[type]).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([genre]) => genre);
-      top.forEach((genre) => lists.push({ type, genre, wanted: Math.min(2, top.length) }));
+      top.forEach((genre) => { if (!choices.includes(genre)) choices.push(genre); });
+      const used = top.filter((genre) => !state.genresOff.has(genre));
+      used.forEach((genre) => lists.push({ type, genre, wanted: Math.min(2, used.length) }));
     }
     const results = await Promise.all(lists.map((list) =>
       cinemeta('/catalog/' + list.type + '/top/genre=' + encodeURIComponent(list.genre) + '.json')));
@@ -980,7 +1032,7 @@
     const popularity = picks.every((entry) => typeof entry.meta.popularity === 'number');
     picks.sort((a, b) => (popularity ? b.meta.popularity - a.meta.popularity : a.rank - b.rank));
     state.recommendations = picks.map(({ meta, type }) => ({ id: meta.id, type, name: meta.name, poster: meta.poster, year: meta.releaseInfo }));
-    state.recommendGenres = Array.from(new Set(lists.map((list) => list.genre)));
+    state.genreChoices = choices;
     state.recommending = false;
     renderResults();
   }

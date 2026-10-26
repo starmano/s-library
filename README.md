@@ -27,7 +27,7 @@ Icons: 96 to choose from (genres, moods, seasons, sports and more), or none. Eac
 1. Open the addon's configure page (`https://<your-host>/configure`) and sign in with your Stremio account.
    Signed up with Facebook, Google or Apple? Use the auth key option on the same page instead.
 2. Click **Install in Stremio** (or **Install in Stremio Web**). You only need to install once.
-3. Create folders, here or inside Stremio: pick a name, and if you like a description, a color and an icon. On the configure page you can add titles from your library, from a Stremio search, or from **Recommended**: popular movies and shows in the same genres as the titles already in the folder, most popular first (from Cinemeta, Stremio's own catalog).
+3. Create folders, here or inside Stremio: pick a name, and if you like a description, a color and an icon. On the configure page you can add titles from your library, from a Stremio search, or from **Recommended**: popular movies and shows in the same genres as the titles already in the folder, most popular first (from Cinemeta, Stremio's own catalog). The genres are shown above the list; tap one to leave it out, or tap it again to use it again. This browser remembers the genres you left out, per folder.
 
 ### Inside Stremio
 
