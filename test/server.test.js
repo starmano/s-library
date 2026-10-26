@@ -80,7 +80,7 @@ test('configured manifest lists the folders from the Stremio library', async () 
 
 test('catalog, meta and stream routes use the current host', async () => {
   const folders = await get(`/${config}/catalog/folder/slib.json`);
-  assert.deepEqual(folders.body.metas.map((m) => [m.id, m.poster]), [['slib:fav', `${base}/img/poster/blue.png`]]);
+  assert.deepEqual(folders.body.metas.map((m) => [m.id, m.poster]), [['slib:fav', `${base}/img/poster/blue.png?name=Favorites`]]);
 
   const titles = await get(`/${config}/catalog/folder/slib.fav/skip=0.json`);
   assert.deepEqual(titles.body.metas.map((m) => m.id), ['tt0133093']);
@@ -113,11 +113,14 @@ test('a broken config or Stremio error degrades gracefully', async () => {
   assert.deepEqual(catalog.body.metas, []);
 });
 
-test('serves folder artwork', async () => {
+test('serves folder artwork, with the folder name on posters', async () => {
   const { res, body } = await get('/img/poster/blue.png');
   assert.equal(res.headers.get('content-type'), 'image/png');
   assert.equal(body.subarray(1, 4).toString(), 'PNG');
-  assert.equal((await get('/img/poster/nope.png')).res.status, 404);
+  const named = await get('/img/poster/blue.png?name=Watch%20later');
+  assert.equal(named.res.status, 200);
+  assert.notDeepEqual(named.body, body);
+  assert.equal((await get('/img/poster/nope.png?name=x')).res.status, 404);
 });
 
 test('proxies sign-in and library calls to the Stremio API', async () => {

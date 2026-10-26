@@ -54,7 +54,7 @@ test('the S-library catalog lists the folders themselves', () => {
     id: 'slib:fav',
     type: 'folder',
     name: 'Favorites',
-    poster: 'https://addon.test/img/poster/red.png',
+    poster: 'https://addon.test/img/poster/red.png?name=Favorites',
     posterShape: 'poster',
     background: 'https://addon.test/img/bg/red.png',
     description: 'The best ones',

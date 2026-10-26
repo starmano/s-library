@@ -55,7 +55,7 @@ test('only the folder itself is visible in the Stremio library', () => {
   ]);
   const [item] = changes;
   assert.equal(item.name, 'Favorites');
-  assert.equal(item.poster, 'https://addon.test/img/poster/red.png');
+  assert.equal(item.poster, 'https://addon.test/img/poster/red.png?name=Favorites');
   assert.equal(item._mtime, '2026-01-01T00:00:00.000Z');
   assert.equal(item.state.noNotif, true);
   // Every item has the fields Stremio needs to read it.
@@ -99,9 +99,21 @@ test('deleting a folder hides it and its titles', () => {
   assert.deepEqual(load(save(library, changes)), []);
 });
 
+test('poster links carry the color and the folder name', () => {
+  assert.equal(S.posterUrl(BASE, 'green', ' Rock & Roll/2 '), 'https://addon.test/img/poster/green.png?name=Rock%20%26%20Roll%2F2');
+  assert.equal(S.posterUrl(BASE, 'nope', ''), 'https://addon.test/img/poster/none.png');
+  const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
+  const renamed = S.toLibraryItems({ ...folder, name: 'Best' }, { baseUrl: BASE, previous: library });
+  assert.equal(renamed[0].poster, 'https://addon.test/img/poster/red.png?name=Best');
+  // Moving to another address updates the poster too.
+  const moved = S.toLibraryItems(folder, { baseUrl: 'https://s-library.example', previous: library });
+  assert.deepEqual(moved.map((item) => item._id), ['slib:abc123']);
+});
+
 test('reads folders saved by the first version, and ignores everything else', () => {
   const folders = S.fromLibraryItems([
     { _id: 'slib:old', type: 'folder', name: 'Westerns', poster: 'https://addon.test/img/poster/brown.png', removed: false },
+    { _id: 'slib:named', type: 'folder', name: 'Anime', poster: 'https://addon.test/img/poster/green.png?name=Anime', removed: false },
     { _id: 'slib:junk', type: 'folder', name: '', poster: 'https://addon.test/img/poster/constructor.png', removed: false },
     { _id: 'slib:junk:info', type: 'slibrary', name: '{not json', removed: true },
     { _id: 'slib:junk:bogus', type: 'slibrary', name: 'x', removed: true },
@@ -110,6 +122,7 @@ test('reads folders saved by the first version, and ignores everything else', ()
     null
   ]);
   assert.deepEqual(folders, [
+    { id: 'named', name: 'Anime', description: '', color: 'green', order: 0, items: [] },
     { id: 'junk', name: 'Untitled folder', description: '', color: null, order: 0, items: [] },
     { id: 'old', name: 'Westerns', description: '', color: 'brown', order: 0, items: [] }
   ]);

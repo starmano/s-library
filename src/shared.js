@@ -85,7 +85,7 @@
 
   // Folders saved before the info item existed still have their color in the poster URL.
   function colorFromPoster(poster) {
-    const match = /\/img\/poster\/([a-z]+)\.png$/.exec(typeof poster === 'string' ? poster : '');
+    const match = /\/img\/poster\/([a-z]+)\.png(?:\?|$)/.exec(typeof poster === 'string' ? poster : '');
     return match && isColor(match[1]) ? match[1] : null;
   }
 
@@ -126,8 +126,10 @@
     return folders.slice().sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
   }
 
-  function posterUrl(baseUrl, color) {
-    return baseUrl + '/img/poster/' + (isColor(color) ? color : 'none') + '.png';
+  // The poster shows the folder's name, so the name is part of its address.
+  function posterUrl(baseUrl, color, name) {
+    const title = cleanText(name, LIMITS.name);
+    return baseUrl + '/img/poster/' + (isColor(color) ? color : 'none') + '.png' + (title ? '?name=' + encodeURIComponent(title) : '');
   }
 
   function backgroundUrl(baseUrl, color) {
@@ -175,12 +177,8 @@
       if (!isUnchanged(previous.get(id), fields)) changes.push(libraryItem(id, fields, previous.get(id), now));
     };
 
-    write(prefix, {
-      name: cleanText(folder.name, LIMITS.name) || 'Untitled folder',
-      type: TYPE,
-      poster: posterUrl(options.baseUrl, color),
-      removed: false
-    });
+    const name = cleanText(folder.name, LIMITS.name) || 'Untitled folder';
+    write(prefix, { name, type: TYPE, poster: posterUrl(options.baseUrl, color, name), removed: false });
     write(prefix + ':info', {
       name: JSON.stringify({
         d: cleanText(folder.description, LIMITS.description),

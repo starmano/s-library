@@ -10,7 +10,7 @@ A Stremio addon that adds **folders** to your Stremio library. Each folder has a
 
 | Where | What you see |
 | --- | --- |
-| **Library** | A new **Folder** type in the type filter. Every folder shows up as a colored folder poster next to your movies and series. |
+| **Library** | A new **Folder** type in the type filter. Every folder shows up as a poster in its color, with its name on it, next to your movies and series. |
 | **Folder page** | Open a folder to see its description, the number of titles, and the titles in it. Click a title to go to it, or **Open folder** to browse it as a poster grid. |
 | **Board / Discover** | A **📁 S-library** row with all your folders, plus one row per folder, marked with its color: `🔴 Favorites`, `🔵 Watch later`, … |
 
@@ -102,7 +102,7 @@ The addon then reads those items through the Stremio API and serves:
 - **meta** for `slib:` ids: the folder page, with links to its titles,
 - **stream** for a folder's title list: one entry that opens the selected title.
 
-Folder posters and backgrounds are small PNGs drawn by the addon itself and cached in memory.
+Folder posters (with the folder's name), backgrounds and the logo are PNGs drawn by the addon itself and cached in memory. Names are written in Plus Jakarta Sans, the font Stremio's own interface uses, which is bundled in `fonts/` under the SIL Open Font License (`fonts/OFL.txt`).
 
 Stremio keeps its own copy of each installed addon's manifest, and Board rows come from that copy. So after every change the configure page also refreshes the manifest stored for S-library in your addon list. Other addons in the list are left as they are.
 
@@ -116,6 +116,8 @@ Stremio keeps its own copy of each installed addon's manifest, and Board rows co
 | `src/shared.js` | Folder model and colors, shared by the server and the configure page |
 | `src/stremio-api.js` | Stremio API client, with a 15-second cache of each account's folders |
 | `src/images.js` | Folder poster, background and logo PNGs |
+| `src/font.js` | Reads the bundled font and draws text for the posters |
+| `fonts/` | Plus Jakarta Sans ExtraBold (Latin letters only) and its license |
 | `public/configure.html` | Configure page (HTML, CSS and JavaScript in one file) |
 
 ## Privacy and security

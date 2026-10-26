@@ -152,7 +152,7 @@ const ROUTES = [
 ];
 
 function imageRoute(req, res, [, kind, color]) {
-  const png = image(kind, color);
+  const png = image(kind, color, new URL(req.url, 'http://localhost').searchParams.get('name') || '');
   if (!png) return sendJson(res, 404, { err: 'Not found' });
   send(res, 200, png, 'image/png', 'public, max-age=86400');
 }

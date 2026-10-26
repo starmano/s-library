@@ -366,6 +366,11 @@
     $('#app').hidden = false;
     renderFolders();
     renderInstall();
+    // Folders saved by an earlier version, or through another address, get their library
+    // poster brought up to date (it carries the folder's name and this server's address).
+    const outdated = state.folders.flatMap((folder) =>
+      S.toLibraryItems(folder, { baseUrl: location.origin, previous: state.raw }));
+    if (outdated.length) put(outdated).catch(() => {});
   }
 
   function showConnectError(message) {
@@ -446,7 +451,7 @@
   function renderFolders() {
     const list = $('#folders');
     list.replaceChildren(...state.folders.map((folder, index) => h('li', { class: 'folder', style: '--c:' + S.colorOf(folder.color).hex },
-      h('img', { class: 'folder-icon', src: S.posterUrl(location.origin, folder.color), alt: '' }),
+      h('img', { class: 'folder-icon', src: S.posterUrl(location.origin, folder.color, folder.name), alt: '' }),
       h('div', null,
         h('div', { class: 'folder-name' }, folder.name),
         h('div', { class: 'folder-meta' }, countLabel(folder.items.length)),

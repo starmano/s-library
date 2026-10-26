@@ -55,7 +55,7 @@ function folderPreview(folder, ctx) {
     id: ID_PREFIX + folder.id,
     type: TYPE,
     name: folder.name,
-    poster: posterUrl(ctx.baseUrl, folder.color),
+    poster: posterUrl(ctx.baseUrl, folder.color, folder.name),
     posterShape: 'poster',
     background: backgroundUrl(ctx.baseUrl, folder.color),
     description: folder.description,

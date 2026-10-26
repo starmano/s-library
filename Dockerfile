@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json app.js ./
 COPY src ./src
 COPY public ./public
+COPY fonts ./fonts
 ENV PORT=7000
 EXPOSE 7000
 USER node

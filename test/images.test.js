@@ -40,6 +40,18 @@ for (const [kind, color, width, height] of [
   });
 }
 
+test('posters show the folder name and are cached per name', () => {
+  const plain = image('poster', 'blue');
+  const named = image('poster', 'blue', 'Watch later');
+  assert.notDeepEqual(named, plain);
+  assert.equal(image('poster', 'blue', 'Watch later'), named, 'cached');
+  assert.equal(chunks(named)[0].data.readUInt32BE(0), 300);
+  // Characters the font lacks are left out; a name of only those draws the plain poster.
+  assert.deepEqual(image('poster', 'blue', '🎬🎬'), plain);
+  // Very long names still render.
+  assert.ok(image('poster', 'red', 'W'.repeat(60)).length > 0);
+});
+
 test('unknown colors are rejected', () => {
   assert.equal(image('poster', 'chartreuse'), null);
   assert.equal(image('bg', 'constructor'), null);
