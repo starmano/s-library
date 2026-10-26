@@ -96,9 +96,11 @@ test('catalog, meta and stream routes use the current host', async () => {
   assert.equal(stream.body.streams[0].externalUrl, 'stremio:///detail/movie/tt0133093');
 });
 
-test('honours PUBLIC_URL and forwarded headers for links', async () => {
-  const res = await fetch(`${base}/manifest.json`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'slib.example' } });
-  assert.equal((await res.json()).logo, 'https://slib.example/img/logo.png');
+test('honours forwarded headers for links, and assumes https away from this computer', async () => {
+  const forwarded = await fetch(`${base}/manifest.json`, { headers: { 'x-forwarded-proto': 'http', 'x-forwarded-host': 'slib.example' } });
+  assert.equal((await forwarded.json()).logo, 'http://slib.example/img/logo.png');
+  const proxied = await fetch(`${base}/manifest.json`, { headers: { 'x-forwarded-host': 'slib.example' } });
+  assert.equal((await proxied.json()).logo, 'https://slib.example/img/logo.png');
 });
 
 test('a broken config or Stremio error degrades gracefully', async () => {

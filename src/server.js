@@ -44,8 +44,10 @@ function sendJson(res, status, data) {
 function baseUrl(req) {
   if (process.env.PUBLIC_URL) return process.env.PUBLIC_URL.replace(/\/+$/, '');
   const first = (value) => (value || '').split(',')[0].trim();
-  const proto = first(req.headers['x-forwarded-proto']) || (req.socket.encrypted ? 'https' : 'http');
   const host = first(req.headers['x-forwarded-host']) || req.headers.host || 'localhost';
+  // Stremio only accepts https addons away from this computer, so assume https unless told otherwise.
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
+  const proto = first(req.headers['x-forwarded-proto']) || (req.socket.encrypted || !local ? 'https' : 'http');
   return `${proto}://${host}`;
 }
 
