@@ -285,17 +285,19 @@ function overviewMeta(id, { folders, settings }, message, ctx) {
 
 // The page an action id opens, given what the action did (see actions.js).
 function actionMeta(id, outcome, ctx) {
-  const { page, folder, library, message, title, undo } = outcome;
-  if (page === 'confirm-remove') {
+  const { page, folder, library, message, title } = outcome;
+  if (page === 'added') {
+    // A short page that says it's done; back returns to the title.
     return {
       ...folderPreview(folder, ctx),
       id,
-      name: `Remove "${title.name}" from "${folder.name}"?`,
+      name: outcome.already ? `Already in "${folder.name}"` : `✓ Added to "${folder.name}"`,
       poster: itemPoster(title) || folderPoster(ctx.baseUrl, folder),
-      description: `This takes "${title.name}" out of the folder "${folder.name}". The title itself stays in Stremio, and you can add it to the folder again any time.`,
+      description: `${message} Press back to return to it.`,
       links: [
-        link('Remove it from the folder?', 'Yes, remove it', pageLink(actionId('remove', folder.id, 0, `${title.type}:${title.id}`))),
-        link('Remove it from the folder?', 'No, keep it', pageLink(ID_PREFIX + folder.id))
+        link('Done', `Back to "${title.name}"`, detailLink(title.type, title.id)),
+        link('Done', `Open "${folder.name}"`, pageLink(ID_PREFIX + folder.id)),
+        link('Done', 'Wrong folder? Fix it on the web', `${ctx.configureUrl}#folder=${folder.id}`)
       ]
     };
   }
@@ -313,7 +315,6 @@ function actionMeta(id, outcome, ctx) {
   }
   if (page === 'folder') {
     const view = folderMeta(folder, library, ctx);
-    if (title && undo) view.links.unshift(link('Folder', 'Undo', pageLink(actionId(undo, folder.id, 0, `${title.type}:${title.id}`))));
     if (title) view.links.unshift(link('Folder', `Back to "${title.name}"`, detailLink(title.type, title.id)));
     return { ...view, id, description: [message, folder.description].filter(Boolean).join('\n\n') };
   }
@@ -337,16 +338,14 @@ function actionLink(ctx, verb, folderId, type, id) {
 
 function stream(folders, type, id, ctx) {
   if (!id.startsWith(ID_PREFIX)) {
-    // Any movie or show: add it to a folder, take it out, or start a new folder with it.
+    if (!TITLE_TYPES.includes(type)) return { streams: [] };
+    // Any movie or show: one tap adds it to a folder, or starts a new folder with it.
     const title = titleOf(id);
-    const streams = folders.map((folder) => {
-      const inside = folder.items.some((item) => item.id === title);
-      return {
-        name: `${colorOf(folder.color).emoji} ${folder.name}`,
-        description: inside ? '✓ Already in this folder\n✕ Tap to remove it (asks first)' : '＋ Tap to add it to this folder',
-        externalUrl: actionLink(ctx, inside ? 'remove-ask' : 'add', folder.id, type, title)
-      };
-    });
+    const streams = folders.map((folder) => ({
+      name: `${colorOf(folder.color).emoji} ${folder.name}`,
+      description: folder.items.some((item) => item.id === title) ? '✓ Already in this folder' : '＋ Tap to add it to this folder',
+      externalUrl: actionLink(ctx, 'add', folder.id, type, title)
+    }));
     streams.push({
       name: '📁 New folder',
       description: '＋ Tap to create a new folder with this title in it',
@@ -362,8 +361,15 @@ function stream(folders, type, id, ctx) {
   const folderId = action ? action.folderId : video ? video.folderId : id.slice(ID_PREFIX.length);
   const folder = folders.find((f) => f.id === folderId);
   if (!video) {
-    // Stremio asks a page without a list of titles for its streams: say what to do instead.
     if (!folder) return { streams: [] };
+    if (action && action.verb === 'add') {
+      // The page after adding a title: back to it.
+      const ref = splitTitle(action.arg);
+      const item = ref && folder.items.find((i) => i.id === ref.id);
+      if (!item) return { streams: [] };
+      return { streams: [{ name: '◀ Back', description: `Back to "${item.name}"`, externalUrl: detailLink(item.type, item.id) }] };
+    }
+    // Stremio asks a page without a list of titles for its streams: say what to do instead.
     return {
       streams: [{
         name: '📁 S-library',
@@ -374,21 +380,15 @@ function stream(folders, type, id, ctx) {
       }]
     };
   }
-  // A title in a folder's list: jump to it, or take it out of the folder.
+  // A title in a folder's list: jump to it.
   const item = folder && folder.items.find((i) => i.id === video.itemId);
-  const streams = [{
-    name: '🎬 Open title',
-    description: `Go to "${item ? item.name : video.itemId}" to watch it`,
-    externalUrl: detailLink(video.type, video.itemId)
-  }];
-  if (item) {
-    streams.push({
-      name: '🗑️ Remove from folder',
-      description: `Take "${item.name}" out of "${folder.name}"\nYou'll be asked to confirm`,
-      externalUrl: actionLink(ctx, 'remove-ask', folder.id, video.type, video.itemId)
-    });
-  }
-  return { streams };
+  return {
+    streams: [{
+      name: '🎬 Open title',
+      description: `Go to "${item ? item.name : video.itemId}" to watch it`,
+      externalUrl: detailLink(video.type, video.itemId)
+    }]
+  };
 }
 
 module.exports = {

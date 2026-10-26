@@ -164,36 +164,32 @@ test('moving folders up and down', async () => {
   assert.deepEqual(folders().map((f) => f.id).slice(0, 2), ['fav', 'later']);
 });
 
-test('adding and taking out titles from their stream list, inside the app', async () => {
+test('one tap in a title\'s stream list adds it to a folder, inside the app', async () => {
   const { streams } = await json(`/${config}/stream/movie/tt0111161.json`);
   const later = streams.find((s) => s.name === '📁 Watch later');
+  assert.equal(later.description, '＋ Tap to add it to this folder');
   let page = await open(later.externalUrl);
-  assert.equal(page.name, 'Watch later');
-  assert.match(page.description, /^✓ Added "The Shawshank Redemption" to this folder\./);
-  assert.equal(linkTo(page, 'Folder', 'Back to "The Shawshank Redemption"'), 'stremio:///detail/movie/tt0111161');
+  assert.equal(page.name, '✓ Added to "Watch later"');
+  assert.equal(page.description, '✓ Added "The Shawshank Redemption" to "Watch later". Press back to return to it.');
   assert.deepEqual(folder('later').items.map((i) => i.id), ['tt0111161']);
-  // Adding is safe to repeat.
-  assert.match((await open(later.externalUrl)).description, /is already in this folder/);
+  assert.equal(linkTo(page, 'Done', 'Back to "The Shawshank Redemption"'), 'stremio:///detail/movie/tt0111161');
+  assert.equal(linkTo(page, 'Done', 'Open "Watch later"'), 'stremio:///detail/folder/slib%3Alater');
+  assert.match(linkTo(page, 'Done', 'Wrong folder? Fix it on the web'), /\/configure#folder=later$/);
+  // Its own stream list leads back to the title.
+  const back = await json(`/${config}/stream/folder/${later.externalUrl.split('/').pop()}.json`);
+  assert.deepEqual(back.streams, [{ name: '◀ Back', description: 'Back to "The Shawshank Redemption"', externalUrl: 'stremio:///detail/movie/tt0111161' }]);
 
+  // Adding is safe to repeat, and titles can't be taken out inside Stremio.
   const again = (await json(`/${config}/stream/movie/tt0111161.json`)).streams.find((s) => s.name === '📁 Watch later');
-  assert.equal(again.description, '✓ Already in this folder\n✕ Tap to remove it (asks first)');
-  // Taking it out asks first.
+  assert.equal(again.description, '✓ Already in this folder');
   page = await open(again.externalUrl);
-  assert.equal(page.name, 'Remove "The Shawshank Redemption" from "Watch later"?');
-  assert.deepEqual(folder('later').items.map((i) => i.id), ['tt0111161'], 'nothing changes before confirming');
-  assert.equal(linkTo(page, 'Remove it from the folder?', 'No, keep it'), 'stremio:///detail/folder/slib%3Alater');
-  page = await open(linkTo(page, 'Remove it from the folder?', 'Yes, remove it'));
-  assert.match(page.description, /^✓ Took "The Shawshank Redemption" out of this folder\./);
-  assert.deepEqual(folder('later').items, []);
-  // And it can be undone.
-  page = await open(linkTo(page, 'Folder', 'Undo'));
-  assert.match(page.description, /^✓ Added "The Shawshank Redemption"/);
+  assert.equal(page.name, 'Already in "Watch later"');
   assert.deepEqual(folder('later').items.map((i) => i.id), ['tt0111161']);
-  // The same from the folder's own list of titles.
   const { streams: inFolder } = await json(`/${config}/stream/folder/${encodeURIComponent('slib:later:movie:tt0111161')}.json`);
-  assert.deepEqual(inFolder.map((s) => s.name), ['🎬 Open title', '🗑️ Remove from folder']);
-  page = await open(linkTo(await open(inFolder[1].externalUrl), 'Remove it from the folder?', 'Yes, remove it'));
-  assert.deepEqual(folder('later').items, []);
+  assert.deepEqual(inFolder.map((s) => s.name), ['🎬 Open title']);
+  // A remove link from an earlier version changes nothing.
+  await open('slib:do:remove:later:0:movie:tt0111161');
+  assert.deepEqual(folder('later').items.map((i) => i.id), ['tt0111161']);
 });
 
 test('"New folder with this title" from a stream list', async () => {

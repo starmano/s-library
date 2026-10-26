@@ -183,31 +183,25 @@ test('adding a title from the stream list stores it and confirms', async () => {
   const add = await fetch(`${base}/${config}/act/add/fav/movie/tt0111161`);
   const page = await add.text();
   assert.equal(add.status, 200);
-  assert.match(page, /✓ Added &quot;The Shawshank Redemption&quot; to this folder/);
+  assert.match(page, /✓ Added &quot;The Shawshank Redemption&quot; to &quot;Favorites&quot;/);
   assert.match(page, /href="stremio:\/\/\/detail\/movie\/tt0111161"/);
+  assert.match(page, new RegExp(`href="${base}/${config}/configure#folder=fav"`));
+  assert.doesNotMatch(page, /Undo/);
   let [folder] = S.fromLibraryItems([...api.library.values()]);
   assert.deepEqual(folder.items.map((item) => item.id), ['tt0133093', 'tt0111161']);
   // The stream list now shows it's in the folder.
   const { body } = await get(`/${config}/stream/movie/tt0111161.json`);
-  assert.equal(body.streams[0].description, '✓ Already in this folder\n✕ Tap to remove it (asks first)');
+  assert.equal(body.streams[0].description, '✓ Already in this folder');
 
   // A title that isn't in the library gets its name from Cinemeta.
   await fetch(`${base}/${config}/act/add/fav/movie/tt1375666`);
   [folder] = S.fromLibraryItems([...api.library.values()]);
   assert.deepEqual(folder.items.at(-1), { id: 'tt1375666', type: 'movie', name: 'Inception', poster: 'https://example.com/inception.jpg' });
 
-  // Taking a title out asks first, and changes nothing until confirmed.
-  const ask = await (await fetch(`${base}/${config}/act/remove-ask/fav/movie/tt0111161`)).text();
-  assert.match(ask, /Remove &quot;The Shawshank Redemption&quot; from &quot;Favorites&quot;\?/);
-  assert.match(ask, new RegExp(`href="${base}/${config}/act/remove/fav/movie/tt0111161"`));
+  // Titles are taken out of folders on the configure page, not from Stremio.
+  assert.equal((await fetch(`${base}/${config}/act/remove/fav/movie/tt0111161`)).status, 404);
   [folder] = S.fromLibraryItems([...api.library.values()]);
-  assert.ok(folder.items.some((item) => item.id === 'tt0111161'));
-  const remove = await fetch(`${base}/${config}/act/remove/fav/movie/tt0111161`);
-  const removed = await remove.text();
-  assert.match(removed, /✓ Took &quot;The Shawshank Redemption&quot; out of this folder/);
-  assert.match(removed, new RegExp(`>Undo</a>`));
-  [folder] = S.fromLibraryItems([...api.library.values()]);
-  assert.deepEqual(folder.items.map((item) => item.id), ['tt0133093', 'tt1375666']);
+  assert.deepEqual(folder.items.map((item) => item.id), ['tt0133093', 'tt0111161', 'tt1375666']);
 });
 
 test('a folder action explains what went wrong', async () => {

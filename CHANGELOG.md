@@ -2,6 +2,11 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.7.0 — 2026-10-26
+
+- Adding a title to a folder from its list of streams is one tap, with a short "✓ Added" page that leads straight back to the title.
+- Titles can no longer be taken out of folders inside Stremio; do that on the configure page.
+
 ## 1.6.0 — 2026-10-26
 
 - Taking a title out of a folder in Stremio now asks first, and the page after it has an Undo link.

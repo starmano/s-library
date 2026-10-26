@@ -1,7 +1,7 @@
 // What S-library's in-app links, search cards and stream-list entries do (see addon.js). Each
 // action edits the user's library and says which page to show afterwards: { page: "folder" |
-// "confirm-delete" | "confirm-remove" | "overview", folderId, message, title, undo (the verb that
-// undoes it), structural (the folder rows changed) }.
+// "added" | "confirm-delete" | "overview", folderId, message, title, already (for "added": the
+// title was in the folder already), structural (the folder rows changed) }.
 'use strict';
 
 const stremio = require('./stremio-api');
@@ -68,21 +68,17 @@ async function runAction(authKey, action, { baseUrl }) {
 
     if (!folder) return overview("This folder doesn't exist anymore.");
 
-    if (action.verb === 'add' || action.verb === 'remove' || action.verb === 'remove-ask') {
-      // Adding and taking out are safe to repeat, so these work from any page.
+    if (action.verb === 'add') {
+      // Adding is safe to repeat, so it works from any page. Titles are taken out of folders on
+      // the configure page.
       const ref = splitTitle(action.arg);
       if (!ref) return show('Something is missing from this link.');
+      const added = (message, changes, title, already) => ({ page: 'added', folderId: folder.id, message, changes, title, already });
       const existing = folder.items.find((item) => item.id === ref.id);
-      if (action.verb !== 'add' && !existing) return show("That title isn't in this folder.", [], { title: { ...ref, name: ref.id } });
-      // Taking a title out asks first.
-      if (action.verb === 'remove-ask') return { page: 'confirm-remove', folderId: folder.id, message: '', title: existing };
-      if (action.verb === 'remove') {
-        return show(`✓ Took "${existing.name}" out of this folder.`, save({ ...folder, items: folder.items.filter((i) => i !== existing) }), { title: existing, undo: 'add' });
-      }
-      if (existing) return show(`"${existing.name}" is already in this folder.`, [], { title: existing });
+      if (existing) return added(`"${existing.name}" was already in "${folder.name}".`, [], existing, true);
       if (folder.items.length >= LIMITS.items) return show(`A folder can hold up to ${LIMITS.items} titles.`);
       const title = await stremio.describeTitle(authKey, ref.type, ref.id);
-      return show(`✓ Added "${title.name}" to this folder.`, save({ ...folder, items: folder.items.concat(title) }), { title, undo: 'remove' });
+      return added(`✓ Added "${title.name}" to "${folder.name}".`, save({ ...folder, items: folder.items.concat(title) }), title, false);
     }
 
     // The rest change the folder itself, so they only apply to the version they were made for.
