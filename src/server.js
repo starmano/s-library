@@ -128,12 +128,15 @@ function tooManyLogins(req) {
 
 // The last requests each account's Stremio apps made, kept in memory only, so the configure page
 // can show whether (and how) an app reaches the addon. No auth keys or IP addresses are kept.
+// They're filed by Stremio account, as the apps' addon link and the configure page usually
+// carry different sign-in keys.
 const RECENT_MAX = 40;
 const RECENT_ACCOUNTS = 500;
 const recent = new Map();
 
-function accountKey(authKey) {
-  return crypto.createHash('sha256').update(authKey).digest('base64url');
+async function accountKey(authKey) {
+  const id = await stremio.userId(authKey).then((user) => `user:${user}`, () => `key:${authKey}`);
+  return crypto.createHash('sha256').update(id).digest('base64url');
 }
 
 function appName(req) {
@@ -155,19 +158,20 @@ function appName(req) {
 function track(req, res, authKey, what) {
   const started = Date.now();
   let done = false;
-  const finish = (result) => {
+  const finish = async (result) => {
     if (done) return;
     done = true;
-    const key = accountKey(authKey);
-    const list = recent.get(key) || [];
-    list.unshift({
+    const entry = {
       at: new Date(started).toISOString(),
       app: appName(req),
       userAgent: (req.headers['user-agent'] || '').slice(0, 300),
       what: what.slice(0, 200),
       result,
       ms: Date.now() - started
-    });
+    };
+    const key = await accountKey(authKey);
+    // Newest first; answers can finish in a different order than their requests started.
+    const list = [entry, ...(recent.get(key) || [])].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
     list.length = Math.min(list.length, RECENT_MAX);
     recent.delete(key);
     recent.set(key, list);
@@ -177,10 +181,10 @@ function track(req, res, authKey, what) {
   res.on('close', () => finish('closed before the answer was sent'));
 }
 
-function recentRoute(req, res, [, configSegment]) {
+async function recentRoute(req, res, [, configSegment]) {
   const config = decodeConfig(configSegment);
   if (!config) return sendJson(res, 404, { err: 'Not found' });
-  sendJson(res, 200, { requests: recent.get(accountKey(config.k)) || [] });
+  sendJson(res, 200, { requests: recent.get(await accountKey(config.k)) || [] });
 }
 
 async function manifestRoute(req, res, [, configSegment]) {
@@ -205,7 +209,7 @@ async function resourceRoute(req, res, [, configSegment, resource, type, rawId, 
   if (config) track(req, res, config.k, `${resource} ${type} ${id}${rawExtra ? ` (${decode(rawExtra)})` : ''}`);
   if (!config || (type !== 'folder' && !titles)) return nothing();
   const action = resource === 'meta' && addon.parseAction(id);
-  if (action) return sendJson(res, 200, { meta: await actionPageMeta(config.k, configSegment, id, action, ctx) });
+  if (action) return sendJson(res, 200, { meta: await actionPageMeta(config.k, id, action, ctx) });
   // Without the folders (e.g. Stremio is unreachable) show nothing rather than something wrong.
   const library = await stremio.getLibrary(config.k).catch(() => null);
   if (!library) return nothing();
@@ -220,18 +224,15 @@ async function resourceRoute(req, res, [, configSegment, resource, type, rawId, 
 }
 
 // After a change to the folder rows, updates the manifest Stremio keeps for S-library.
-function refreshInstalledManifest(authKey, configSegment, library) {
-  const suffix = `/${configSegment}/manifest.json`;
-  stremio
-    .updateInstalledManifest(authKey, suffix, (link) => addon.manifest(library, { baseUrl: link.slice(0, -suffix.length) }))
-    .catch(() => {});
+function refreshInstalledManifest(authKey, ctx, library) {
+  stremio.updateInstalledManifest(authKey, ctx.baseUrl, () => addon.manifest(library, ctx)).catch(() => {});
 }
 
 // Runs an in-app action (an "slib:do:..." page) and returns the page to show, also on failure.
-async function actionPageMeta(authKey, configSegment, id, action, ctx) {
+async function actionPageMeta(authKey, id, action, ctx) {
   try {
     const outcome = await runAction(authKey, action, ctx);
-    if (outcome.structural) refreshInstalledManifest(authKey, configSegment, outcome.library);
+    if (outcome.structural) refreshInstalledManifest(authKey, ctx, outcome.library);
     const folder = outcome.library.folders.find((f) => f.id === outcome.folderId);
     if (outcome.page !== 'overview' && !folder) {
       return addon.actionMeta(id, { page: 'overview', library: outcome.library, message: "This folder doesn't exist anymore." }, ctx);
@@ -330,7 +331,7 @@ async function proxyRoute(req, res, [, method]) {
     return sendJson(res, 400, { error: { message: 'Invalid request' } });
   }
   const result = await stremio.request(method, body).catch(() => null);
-  if (method === 'datastorePut') stremio.forgetFolders(body.authKey);
+  if (method === 'datastorePut') await stremio.forgetFolders(body.authKey).catch(() => {});
   if (!result || !result.json) return sendJson(res, 502, { error: { message: 'Could not reach Stremio. Try again.' } });
   sendJson(res, result.status, result.json);
 }

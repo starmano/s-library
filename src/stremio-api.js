@@ -79,8 +79,15 @@ function getLibrary(authKey) {
   return entry.promise;
 }
 
-function forgetFolders(authKey) {
+// Drops the cached folders of the account `authKey` belongs to, for every sign-in key it was
+// read with (see userId).
+async function forgetFolders(authKey) {
   cache.delete(authKey);
+  const user = await userId(authKey).catch(() => null);
+  if (!user) return;
+  for (const key of [...cache.keys()]) {
+    if (users.has(key) && (await users.get(key).catch(() => null)) === user) cache.delete(key);
+  }
 }
 
 // Changes S-library's items: `edit` gets the current folders, settings and items (`previous`,
@@ -90,22 +97,38 @@ async function editLibrary(authKey, edit) {
   const previous = await loadCurrent(authKey);
   const { changes = [], ...result } = await edit({ ...readLibrary([...previous.values()]), previous });
   if (changes.length > 0) {
-    forgetFolders(authKey);
     await save(authKey, changes, previous);
-    forgetFolders(authKey);
+    await forgetFolders(authKey);
   }
   return { ...result, library: readLibrary([...previous.values()]) };
 }
 
+// The Stremio account an auth key belongs to. Every sign-in makes a new key, so the addon link
+// installed in Stremio and the configure page often have different keys for the same account.
+const users = new Map();
+
+function userId(authKey) {
+  if (!users.has(authKey)) {
+    const promise = call('getUser', { authKey }).then((user) => {
+      if (!user || typeof user._id !== 'string') throw new Error('No user');
+      return user._id;
+    });
+    promise.catch(() => users.delete(authKey));
+    users.set(authKey, promise);
+    if (users.size > CACHE_MAX) users.delete(users.keys().next().value);
+  }
+  return users.get(authKey);
+}
+
 // Stremio keeps its own copy of each installed addon's manifest (Board rows come from it). This
-// replaces the copy of every installed S-library link ending in `suffix` with `makeManifest(link)`,
-// leaving other addons as they are.
-async function updateInstalledManifest(authKey, suffix, makeManifest) {
+// replaces the copy of every S-library link installed from `baseUrl` (whichever sign-in key it
+// carries) with `makeManifest(link)`, leaving other addons as they are.
+async function updateInstalledManifest(authKey, baseUrl, makeManifest) {
   const { addons } = await call('addonCollectionGet', { authKey, update: false });
   if (!Array.isArray(addons)) return;
   let changed = false;
   for (const addon of addons) {
-    if (!addon || typeof addon.transportUrl !== 'string' || !addon.transportUrl.endsWith(suffix)) continue;
+    if (!isSLibrary(addon, baseUrl)) continue;
     const manifest = makeManifest(addon.transportUrl);
     if (JSON.stringify(manifest) === JSON.stringify(addon.manifest)) continue;
     addon.manifest = manifest;
@@ -130,4 +153,9 @@ async function describeTitle(authKey, type, id) {
   return { id, type, name: id };
 }
 
-module.exports = { request, getLibrary, forgetFolders, editLibrary, describeTitle, updateInstalledManifest };
+function isSLibrary(addon, baseUrl) {
+  return Boolean(addon && addon.manifest && addon.manifest.id === 'community.slibrary' &&
+    typeof addon.transportUrl === 'string' && addon.transportUrl.startsWith(`${baseUrl}/`) && addon.transportUrl.endsWith('/manifest.json'));
+}
+
+module.exports = { request, getLibrary, forgetFolders, editLibrary, describeTitle, updateInstalledManifest, userId };

@@ -30,6 +30,7 @@ let config;
 
 test.before(async () => {
   api = await startFakeApi({
+    otherKeys: ['installed-key'],
     items: [...favorites, ...deleted, removedByStremio, movieItem],
     cinemeta: { tt1375666: { id: 'tt1375666', type: 'movie', name: 'Inception', poster: 'https://example.com/inception.jpg' } }
   });
@@ -231,15 +232,19 @@ test("Stremio's own \"Remove from library\" only takes a folder out of the Libra
 });
 
 test('shows each account the requests its Stremio apps made, without auth keys', async () => {
+  // The TV uses the addon link installed earlier, with another sign-in key than this page.
+  const installed = S.encodeConfig({ k: 'installed-key' });
   const tv = { 'user-agent': 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.5) AppleWebKit/537.36', origin: 'file://' };
-  await fetch(`${base}/${config}/meta/folder/slib%3Afav.json`, { headers: tv });
-  await fetch(`${base}/${config}/meta/folder/slib%3Afav/oddly-shaped/request.json`, { headers: tv });
+  await fetch(`${base}/${installed}/meta/folder/slib%3Afav.json`, { headers: tv });
+  await fetch(`${base}/${installed}/meta/folder/slib%3Afav/oddly-shaped/request.json`, { headers: tv });
+  await new Promise((resolve) => setTimeout(resolve, 50));
   const { body } = await get(`/${config}/recent.json`);
   assert.deepEqual(body.requests.slice(0, 2).map((r) => [r.app, r.what, r.result]), [
     ['Samsung TV, web version', 'unknown request: /meta/folder/slib:fav/oddly-shaped/request.json', 404],
     ['Samsung TV, web version', 'meta folder slib:fav', 200]
   ]);
-  assert.ok(!JSON.stringify(body).includes('test-auth-key') && !JSON.stringify(body).includes(config));
+  const text = JSON.stringify(body);
+  assert.ok(!text.includes('test-auth-key') && !text.includes('installed-key') && !text.includes(config) && !text.includes(installed));
   // Other accounts see only their own.
   assert.deepEqual((await get(`/${S.encodeConfig({ k: 'someone-else' })}/recent.json`)).body.requests, []);
   assert.equal((await get('/nope/recent.json')).res.status, 404);

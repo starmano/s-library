@@ -2,6 +2,11 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.13.1 — 2026-10-27
+
+- "Recent requests from Stremio" now shows the requests of all your Stremio apps. Before, it only showed requests made with the same sign-in as the configure page, and each sign-in is a new one.
+- Changes made on the configure page now also reach the S-library that's installed in Stremio when it was installed with an earlier sign-in.
+
 ## 1.13.0 — 2026-10-26
 
 - New "Recent requests from Stremio" section at the bottom of the configure page: it shows which of your Stremio apps reached S-library, what they asked for and how it went, to find out why an app (like a TV) doesn't work.

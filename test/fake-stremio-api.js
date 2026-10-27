@@ -15,7 +15,8 @@ function keepStremioFields(item) {
   return { ...pick(item, ITEM_FIELDS), behaviorHints: pick(item.behaviorHints, HINT_FIELDS) };
 }
 
-function startFakeApi({ email = 'me@example.com', password = 'secret', authKey = 'test-auth-key', items = [], addons = [], cinemeta = {} } = {}) {
+// `otherKeys` are more sign-in keys for the same account (each sign-in makes a new one).
+function startFakeApi({ email = 'me@example.com', password = 'secret', authKey = 'test-auth-key', otherKeys = [], items = [], addons = [], cinemeta = {} } = {}) {
   const library = new Map(items.map((item) => [item._id, keepStremioFields(item)]));
   const collection = { addons };
   const calls = [];
@@ -42,7 +43,8 @@ function startFakeApi({ email = 'me@example.com', password = 'secret', authKey =
           ? reply({ result: { authKey, user: { email } } })
           : reply({ error: { message: 'Wrong email or password', code: 2 } });
       }
-      if (body.authKey !== authKey) return reply({ error: { message: 'Session does not exist', code: 1 } });
+      if (body.authKey !== authKey && !otherKeys.includes(body.authKey)) return reply({ error: { message: 'Session does not exist', code: 1 } });
+      if (method === 'getUser') return reply({ result: { _id: 'user-1', email } });
       if (method === 'datastoreMeta') {
         return reply({ result: [...library.values()].map((item) => [item._id, Date.parse(item._mtime)]) });
       }

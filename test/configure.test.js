@@ -20,14 +20,16 @@ const library = [
 ].map(([_id, type, name]) => ({ _id, type, name, removed: false, temp: false, _mtime: '2026-01-01T00:00:00Z' }));
 
 test('create, edit, reorder and delete folders from the configure page', { skip: !chromium && 'Playwright is not installed' }, async (t) => {
-  const api = await startFakeApi({ items: library });
+  const api = await startFakeApi({ items: library, otherKeys: ['installed-key'] });
   process.env.STREMIO_API_URL = api.url;
   const server = require('../src/server').createServer();
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const config = S.encodeConfig({ k: 'test-auth-key' });
   const cinemeta = { transportUrl: 'https://v3-cinemeta.strem.io/manifest.json', manifest: { id: 'com.linvo.cinemeta', catalogs: [] } };
-  api.collection.addons = [cinemeta, { transportUrl: `${base}/${config}/manifest.json`, manifest: { id: 'community.slibrary', catalogs: [] } }];
+  // Installed earlier, so its link has another sign-in key than this page will get.
+  const installed = S.encodeConfig({ k: 'installed-key' });
+  api.collection.addons = [cinemeta, { transportUrl: `${base}/${installed}/manifest.json`, manifest: { id: 'community.slibrary', catalogs: [] } }];
 
   const browser = await chromium.launch();
   t.after(async () => {

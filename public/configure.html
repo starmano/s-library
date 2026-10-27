@@ -465,10 +465,12 @@
   // or when this server runs a newer version, give S-library's entry the fresh manifest. Other
   // addons in the list are left exactly as they are.
   async function refreshInstalledAddon() {
-    const suffix = '/' + S.encodeConfig({ k: state.authKey }) + '/manifest.json';
     const { addons } = await api('addonCollectionGet', { authKey: state.authKey, update: false });
+    // S-library links installed from this server. They may carry another sign-in key than this
+    // page (every sign-in makes a new one) but belong to the same account.
     const ours = (Array.isArray(addons) ? addons : []).filter((addon) =>
-      addon && typeof addon.transportUrl === 'string' && addon.transportUrl.endsWith(suffix));
+      addon && addon.manifest && addon.manifest.id === 'community.slibrary' && typeof addon.transportUrl === 'string' &&
+      addon.transportUrl.startsWith(location.origin + '/') && addon.transportUrl.endsWith('/manifest.json'));
     let changed = false;
     for (const addon of ours) {
       const manifest = await (await fetch(addon.transportUrl, { cache: 'no-store' })).json();
