@@ -58,8 +58,8 @@ test('only the folder itself is visible in the Stremio library', () => {
   ]);
   const [item] = changes;
   assert.equal(item.name, 'Favorites');
-  // Opened from the Library, it shows its stream list, also in older Stremio apps.
-  assert.equal(item.behaviorHints.defaultVideoId, 'slib:abc123');
+  // No default video, so TVs can show a folder's titles (see the addon tests).
+  assert.equal(item.behaviorHints.defaultVideoId, null);
   const library = save(new Map(), changes);
   assert.deepEqual(S.toLibraryItems(folder, { baseUrl: BASE, previous: library }), [], 'nothing changes on the next save');
   assert.equal(item.poster, 'https://addon.test/img/poster/red.png?name=Favorites');

@@ -177,7 +177,7 @@ test('one tap in a title\'s stream list adds it to a folder, inside the app', as
   assert.match(linkTo(page, 'Done', 'Wrong folder? Fix it on the web'), /\/configure#folder=later$/);
   // Its own stream list leads back to the title.
   const back = await json(`/${config}/stream/folder/${later.externalUrl.split('/').pop()}.json`);
-  assert.deepEqual(back.streams, [{ name: '◀ Back', description: 'Back to "The Shawshank Redemption"', externalUrl: 'stremio:///detail/movie/tt0111161' }]);
+  assert.deepEqual(back.streams, [{ name: '◀ Back', description: 'Back to "The Shawshank Redemption"', externalUrl: 'stremio:///detail/movie/tt0111161', androidTvUrl: 'stremio:///detail/movie/tt0111161' }]);
 
   // Adding is safe to repeat, and titles can't be taken out inside Stremio.
   const again = (await json(`/${config}/stream/movie/tt0111161.json`)).streams.find((s) => s.name === '📁 Watch later');

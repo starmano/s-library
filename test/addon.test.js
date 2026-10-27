@@ -79,6 +79,29 @@ test('posters can leave out the name or the icon', () => {
   assert.ok(icons.length > 90);
 });
 
+test('Samsung and LG TVs get folder pages with the titles as a list, and TV links', () => {
+  const tv = { ...ctx, native: true, tv: true };
+  const meta = addon.meta(library, 'slib:fav', tv);
+  assert.equal(meta.behaviorHints, undefined, 'no default video: the TV shows the list of titles');
+  assert.deepEqual(meta.videos, [
+    { id: 'slib:fav:movie:tt0133093', title: 'The Matrix', thumbnail: 'https://images.metahub.space/background/medium/tt0133093/img' },
+    { id: 'slib:fav:series:kitsu:1', title: 'Cowboy Bebop', thumbnail: 'https://example.com/bebop.jpg' }
+  ]);
+  assert.equal(addon.catalog(library, 'slib', {}, tv).metas[0].behaviorHints, undefined);
+  // A title in that list opens it, with the link in the TV fields too.
+  assert.deepEqual(addon.stream(library, 'folder', 'slib:fav:movie:tt0133093', tv).streams, [{
+    name: '🎬 Open',
+    description: 'Open "The Matrix"',
+    thumbnail: 'https://images.metahub.space/poster/medium/tt0133093/img',
+    externalUrl: 'stremio:///detail/movie/tt0133093',
+    androidTvUrl: 'stremio:///detail/movie/tt0133093',
+    tizenUrl: 'stremio:///detail/movie/tt0133093',
+    webosUrl: 'stremio:///detail/movie/tt0133093'
+  }]);
+  // Elsewhere, folder pages have no videos.
+  assert.equal(addon.meta(library, 'slib:fav', ctx).videos, undefined);
+});
+
 test('every S-library page opens on its own stream list, also in older Stremio apps', () => {
   // Older apps (e.g. on Samsung TVs) don't guess it, and wait for an episode list otherwise.
   assert.equal(addon.meta(library, 'slib:fav', ctx).behaviorHints.defaultVideoId, 'slib:fav');
@@ -151,13 +174,14 @@ test("a folder's page leads to its poster grid, then lists its titles", () => {
   const native = { ...ctx, native: true };
   const grid = `discover/${encodeURIComponent(ctx.manifestUrl)}/folder/slib.fav`;
   const titles = [
-    { name: 'The Matrix', description: 'Movie · tap to open', thumbnail: 'https://images.metahub.space/poster/medium/tt0133093/img', externalUrl: 'stremio:///detail/movie/tt0133093' },
-    { name: 'Cowboy Bebop', description: 'Series · tap to open', thumbnail: 'https://example.com/bebop.jpg', externalUrl: 'stremio:///detail/series/kitsu%3A1' }
+    { name: 'The Matrix', description: 'Movie · tap to open', thumbnail: 'https://images.metahub.space/poster/medium/tt0133093/img', externalUrl: 'stremio:///detail/movie/tt0133093', androidTvUrl: 'stremio:///detail/movie/tt0133093' },
+    { name: 'Cowboy Bebop', description: 'Series · tap to open', thumbnail: 'https://example.com/bebop.jpg', externalUrl: 'stremio:///detail/series/kitsu%3A1', androidTvUrl: 'stremio:///detail/series/kitsu%3A1' }
   ];
   assert.deepEqual(addon.stream(library, 'folder', 'slib:fav', native).streams, [{
     name: '🖼️ Show as posters',
     description: 'Open the 2 titles in "Favorites" as posters.\nTap one to open it; back brings you to the posters again.',
-    externalUrl: `stremio:///${grid}`
+    externalUrl: `stremio:///${grid}`,
+    androidTvUrl: `stremio:///${grid}`
   }, ...titles]);
   // Stremio Web opens stream entries in a new tab, so it gets Stremio Web's address.
   assert.equal(addon.stream(library, 'folder', 'slib:fav', ctx).streams[0].externalUrl, `https://web.stremio.com/#/${grid}`);
@@ -173,6 +197,8 @@ test("a folder's page leads to its poster grid, then lists its titles", () => {
   assert.equal(addon.stream(library, 'folder', 'slib:fav:series:kitsu:1', native).streams[0].externalUrl, 'stremio:///detail/series/kitsu%3A1');
   // An empty folder's page explains how to fill it.
   assert.match(addon.stream(library, 'folder', 'slib:later', ctx).streams[0].description, /folder is empty/);
+  // Stremio Web gets web links, without TV fields.
+  assert.equal(addon.stream(library, 'folder', 'slib:fav', ctx).streams[0].androidTvUrl, undefined);
   assert.deepEqual(addon.stream(library, 'folder', 'slib:missing', ctx).streams, []);
 });
 

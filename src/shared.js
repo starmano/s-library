@@ -246,8 +246,9 @@
     const before = previous.get(prefix);
     const removed = before && before.type === TYPE ? Boolean(before.removed) : !readSettings(previous.values()).library;
     const poster = folderPoster(options.baseUrl, { color, name, icon, showName: folder.showName });
-    // Opened from the Library, the folder shows its stream list (see opensStreams in addon.js).
-    const behaviorHints = { defaultVideoId: prefix, featuredVideoId: null, hasScheduledVideos: false };
+    // No default video: opened from the Library, a folder page then shows its stream list, or on
+    // TVs its titles (see folderMeta in addon.js). Version 1.12.1 set one; this undoes that.
+    const behaviorHints = { defaultVideoId: null, featuredVideoId: null, hasScheduledVideos: false };
     write(prefix, { name, type: TYPE, poster, removed, behaviorHints });
     const info = {
       d: cleanText(folder.description, LIMITS.description),

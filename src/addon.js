@@ -133,15 +133,17 @@ function link(category, name, url) {
 }
 
 // S-library's pages have no episode list: they open on their own stream list. Stremio reads
-// that from defaultVideoId (Cinemeta sets it on every movie). Newer apps guess it when it's
-// missing; older ones, like the one on Samsung TVs, wait for episodes forever.
+// that from defaultVideoId (Cinemeta sets it on every movie), or guesses it.
 function opensStreams(meta) {
   return { ...meta, behaviorHints: { ...meta.behaviorHints, defaultVideoId: meta.id } };
 }
 
+// Stremio on Samsung and LG TVs shows a folder's stream list as loading forever: its entries
+// only link to other pages, which those apps seem to leave out. So TVs get folder pages with
+// the titles as an episode-style list instead, which they show (see folderMeta).
 function folderPreview(folder, ctx) {
   const count = folder.items.length;
-  return opensStreams({
+  return (ctx.tv ? (meta) => meta : opensStreams)({
     id: ID_PREFIX + folder.id,
     type: TYPE,
     name: folder.name,
@@ -225,8 +227,16 @@ function catalog(library, id, extra, ctx) {
   return { metas: metas.slice(skip, skip + PAGE_SIZE) };
 }
 
-// Folder pages up to version 1.7 listed their titles as videos, with ids like
+// Titles as videos (folder pages on TVs, and everywhere up to version 1.7) have ids like
 // "slib:<folder id>:<type>:<title id>" (title ids may contain ":" themselves).
+function videoId(folder, item) {
+  return `${ID_PREFIX}${folder.id}:${item.type}:${item.id}`;
+}
+
+function itemThumbnail(item) {
+  return /^tt\d+$/.test(item.id) ? `https://images.metahub.space/background/medium/${item.id}/img` : itemPoster(item);
+}
+
 function parseVideoId(id) {
   if (id.startsWith(ACTION_PREFIX)) return null;
   const [prefix, folderId, type, ...rest] = id.split(':');
@@ -269,9 +279,10 @@ function folderMeta(folder, { folders, settings }, ctx) {
         link('Icon', `${key === folder.icon ? '✓ ' : ''}${icon.label}`, edit('icon', key))),
       ...folder.items.map((item) => link('In this folder', item.name, detailLink(item.type, item.id))),
       ...generalLinks(settings, ctx, `${ctx.configureUrl}#folder=${folder.id}`)
-    ]
-    // No videos: Stremio then shows the page's stream list right away, which leads to the
-    // folder's poster grid (see stream).
+    ],
+    // Elsewhere no videos: Stremio then shows the page's stream list right away, which leads to
+    // the folder's poster grid (see stream). TVs get the titles as videos.
+    ...(ctx.tv ? { videos: folder.items.map((item) => ({ id: videoId(folder, item), title: item.name, thumbnail: itemThumbnail(item) })) } : {})
   };
 }
 
@@ -354,7 +365,22 @@ function actionLink(ctx, verb, folderId, type, id) {
   return `${ctx.actionUrl}/${verb}/${folderId}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
 }
 
-function stream({ folders, settings }, type, id, ctx) {
+// Stremio's TV apps read their own link fields on stream-list entries; they get the same link.
+function withTvLinks({ streams }, ctx) {
+  return {
+    streams: streams.map((entry) => {
+      if (!entry.externalUrl || !entry.externalUrl.startsWith('stremio:')) return entry;
+      const url = entry.externalUrl;
+      return { ...entry, androidTvUrl: url, ...(ctx.tv ? { tizenUrl: url, webosUrl: url } : {}) };
+    })
+  };
+}
+
+function stream(library, type, id, ctx) {
+  return withTvLinks(streamList(library, type, id, ctx), ctx);
+}
+
+function streamList({ folders, settings }, type, id, ctx) {
   if (!id.startsWith(ID_PREFIX)) {
     if (!TITLE_TYPES.includes(type)) return { streams: [] };
     // Any movie or show: one tap adds it to a folder, or starts a new folder with it.
@@ -416,8 +442,16 @@ function stream({ folders, settings }, type, id, ctx) {
       }]
     };
   }
-  // A title from a folder page of an earlier version: open it.
-  return { streams: [{ name: '🎬 Open', description: 'Tap to open', externalUrl: openLink(ctx, video.type, video.itemId) }] };
+  // A title in a folder's episode-style list (on TVs, and on pages of earlier versions): open it.
+  const item = folder && folder.items.find((i) => i.id === video.itemId);
+  return {
+    streams: [{
+      name: '🎬 Open',
+      description: item ? `Open "${item.name}"` : 'Tap to open',
+      thumbnail: item ? itemPoster(item) : undefined,
+      externalUrl: openLink(ctx, video.type, video.itemId)
+    }]
+  };
 }
 
 module.exports = {

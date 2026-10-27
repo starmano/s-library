@@ -235,7 +235,8 @@ test('shows each account the requests its Stremio apps made, without auth keys',
   // The TV uses the addon link installed earlier, with another sign-in key than this page.
   const installed = S.encodeConfig({ k: 'installed-key' });
   const tv = { 'user-agent': 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.5) AppleWebKit/537.36', origin: 'file://' };
-  await fetch(`${base}/${installed}/meta/folder/slib%3Afav.json`, { headers: tv });
+  const { meta } = await (await fetch(`${base}/${installed}/meta/folder/slib%3Afav.json`, { headers: tv })).json();
+  assert.deepEqual(meta.videos.map((v) => v.id), ['slib:fav:movie:tt0133093', 'slib:fav:movie:tt0111161', 'slib:fav:movie:tt1375666'], 'TVs get the titles as a list');
   await fetch(`${base}/${installed}/meta/folder/slib%3Afav/oddly-shaped/request.json`, { headers: tv });
   await new Promise((resolve) => setTimeout(resolve, 50));
   const { body } = await get(`/${config}/recent.json`);

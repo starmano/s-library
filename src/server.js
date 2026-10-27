@@ -79,7 +79,9 @@ function context(req, configSegment) {
     configureUrl: `${base}/${configSegment}/configure`,
     actionUrl: `${base}/${configSegment}/act`,
     // The Stremio apps don't send an Origin header; Stremio Web, running in a browser, does.
-    native: !req.headers.origin
+    native: !req.headers.origin,
+    // Stremio on Samsung (Tizen) and LG (webOS) TVs.
+    tv: /SMART-TV|Tizen|Web0S|webOS/i.test(req.headers['user-agent'] || '')
   };
 }
 

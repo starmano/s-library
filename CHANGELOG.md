@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.14.0 — 2026-10-27
+
+- Samsung and LG TVs: a folder's page lists its titles with pictures, instead of loading forever. The links in S-library's entries are also given to the TV apps in the form they read. Open the configure page once so folders in your Library get the change too.
+
 ## 1.13.1 — 2026-10-27
 
 - "Recent requests from Stremio" now shows the requests of all your Stremio apps. Before, it only showed requests made with the same sign-in as the configure page, and each sign-in is a new one.
