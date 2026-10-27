@@ -414,27 +414,27 @@ function streamList({ folders, settings }, type, id, ctx) {
       if (!item) return { streams: [] };
       return { streams: [{ name: '◀ Back', description: `Back to "${item.name}"`, externalUrl: openLink(ctx, item.type, item.id) }] };
     }
-    // A folder's page (or an edit that shows it): its poster grid first, then its titles, one
-    // tap each. Stremio forgets the way back when it opens a stream-list link, and the Android
-    // app shows no pictures there; the grid has both. It's the folder's row in Discover, so
-    // it's left out when folders are.
-    if (folder.items.length) {
-      const grid = settings.discover
-        ? [{
-            name: '🖼️ Show as posters',
-            description: `Open the ${folder.items.length === 1 ? 'title' : `${folder.items.length} titles`} in "${folder.name}" as posters.\nTap one to open it; back brings you to the posters again.`,
-            externalUrl: streamLink(ctx, gridPath(folder, ctx))
-          }]
-        : [];
-      return {
-        streams: grid.concat(folder.items.map((item) => ({
-          name: item.name,
-          description: `${TYPE_LABELS[item.type] || item.type} · tap to open`,
-          thumbnail: itemPoster(item),
-          externalUrl: openLink(ctx, item.type, item.id)
-        })))
-      };
-    }
+    return folderStreams(folder, settings, ctx);
+  }
+  // A title in a folder's episode-style list (on TVs, and on pages of earlier versions). Stremio
+  // also goes here when a folder is opened from the Library after a title was played from it
+  // (on a TV): it remembers that title. So this lists the whole folder too.
+  if (folder && folder.items.some((i) => i.id === video.itemId)) return folderStreams(folder, settings, ctx);
+  return {
+    streams: [{
+      name: '🎬 Open',
+      description: 'Tap to open',
+      externalUrl: openLink(ctx, video.type, video.itemId)
+    }]
+  };
+}
+
+// A folder's page (or an edit that shows it): its poster grid first, then its titles, one tap
+// each. Stremio forgets the way back when it opens a stream-list link, and the Android app shows
+// no pictures there; the grid has both. It's the folder's row in Discover, so it's left out
+// when folders are.
+function folderStreams(folder, settings, ctx) {
+  if (!folder.items.length) {
     return {
       streams: [{
         name: '📁 S-library',
@@ -443,15 +443,20 @@ function streamList({ folders, settings }, type, id, ctx) {
       }]
     };
   }
-  // A title in a folder's episode-style list (on TVs, and on pages of earlier versions): open it.
-  const item = folder && folder.items.find((i) => i.id === video.itemId);
+  const grid = settings.discover
+    ? [{
+        name: '🖼️ Show as posters',
+        description: `Open the ${folder.items.length === 1 ? 'title' : `${folder.items.length} titles`} in "${folder.name}" as posters.\nTap one to open it; back brings you to the posters again.`,
+        externalUrl: streamLink(ctx, gridPath(folder, ctx))
+      }]
+    : [];
   return {
-    streams: [{
-      name: '🎬 Open',
-      description: item ? `Open "${item.name}"` : 'Tap to open',
-      thumbnail: item ? itemPoster(item) : undefined,
-      externalUrl: openLink(ctx, video.type, video.itemId)
-    }]
+    streams: grid.concat(folder.items.map((item) => ({
+      name: item.name,
+      description: `${TYPE_LABELS[item.type] || item.type} · tap to open`,
+      thumbnail: itemPoster(item),
+      externalUrl: openLink(ctx, item.type, item.id)
+    })))
   };
 }
 

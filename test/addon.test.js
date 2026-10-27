@@ -90,10 +90,8 @@ test('Samsung and LG TVs get folder pages with the titles as a list', () => {
   assert.equal(addon.catalog(library, 'slib', {}, tv).metas[0].behaviorHints, undefined);
   // Their own link fields start another TV app, so they stay empty (the server gives TVs the
   // title's streams instead; see the server tests).
-  const [open] = addon.stream(library, 'folder', 'slib:fav:movie:tt0133093', tv).streams;
-  assert.equal(open.androidTvUrl, 'stremio:///detail/movie/tt0133093');
-  assert.equal(open.tizenUrl, undefined);
-  assert.equal(open.webosUrl, undefined);
+  const entries = addon.stream(library, 'folder', 'slib:fav:movie:tt0133093', tv).streams;
+  assert.ok(entries.every((entry) => entry.tizenUrl === undefined && entry.webosUrl === undefined));
   // Elsewhere, folder pages have no videos.
   assert.equal(addon.meta(library, 'slib:fav', ctx).videos, undefined);
 });
@@ -189,8 +187,11 @@ test("a folder's page leads to its poster grid, then lists its titles", () => {
   assert.deepEqual(addon.stream(noGrid, 'folder', 'slib:fav', native).streams, titles);
   assert.equal(addon.stream(noGrid, 'folder', 'slib:fav', ctx).streams[0].externalUrl, 'https://web.stremio.com/#/detail/movie/tt0133093');
 
-  // Links from folder pages of earlier versions still open the title.
-  assert.equal(addon.stream(library, 'folder', 'slib:fav:series:kitsu:1', native).streams[0].externalUrl, 'stremio:///detail/series/kitsu%3A1');
+  // A title of the folder (from pages of earlier versions, or the one Stremio remembers after
+  // it was played from the folder on a TV) lists the whole folder too.
+  assert.deepEqual(addon.stream(library, 'folder', 'slib:fav:series:kitsu:1', native), addon.stream(library, 'folder', 'slib:fav', native));
+  // One that's no longer in the folder just opens.
+  assert.equal(addon.stream(library, 'folder', 'slib:fav:movie:tt9', native).streams[0].externalUrl, 'stremio:///detail/movie/tt9');
   // An empty folder's page explains how to fill it.
   assert.match(addon.stream(library, 'folder', 'slib:later', ctx).streams[0].description, /folder is empty/);
   // Stremio Web gets web links, without TV fields.

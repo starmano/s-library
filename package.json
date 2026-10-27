@@ -1,6 +1,6 @@
 {
   "name": "s-library",
-  "version": "1.15.0",
+  "version": "1.15.1",
   "description": "Stremio addon that adds folders (with a name, description and color) to your Stremio library.",
   "main": "app.js",
   "scripts": {

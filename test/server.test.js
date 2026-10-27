@@ -117,7 +117,7 @@ test('catalog, meta and stream routes use the current host', async () => {
   assert.equal(missing.res.status, 404);
 
   const stream = await get(`/${config}/stream/folder/slib:fav:movie:tt0133093.json`);
-  assert.equal(stream.body.streams[0].externalUrl, 'stremio:///detail/movie/tt0133093');
+  assert.ok(stream.body.streams.some((s) => s.externalUrl === 'stremio:///detail/movie/tt0133093'));
 });
 
 test('honours forwarded headers for links, and assumes https away from this computer', async () => {
@@ -277,9 +277,11 @@ test('on a TV, a title in a folder plays with streams from the account\'s other 
     { name: 'Fake streams', infoHash: 'a'.repeat(40) }
   ]);
   assert.deepEqual(asked, ['/stream/movie/tt0133093.json'], 'only addons that serve movies are asked, and not S-library');
-  // Elsewhere the same entry opens the title's page.
+  // Elsewhere (e.g. the phone, opening the folder after it was played from on the TV) the
+  // whole folder is listed, each title opening its page.
   const phone = (await get(`/${config}/stream/folder/${encodeURIComponent('slib:fav:movie:tt0133093')}.json`)).body.streams;
-  assert.equal(phone[0].externalUrl, 'stremio:///detail/movie/tt0133093');
+  assert.deepEqual(phone.map((s) => s.name), ['🖼️ Show as posters', 'The Matrix', 'The Shawshank Redemption', 'Inception']);
+  assert.equal(phone[1].externalUrl, 'stremio:///detail/movie/tt0133093');
 });
 
 test('only asks addons on public https addresses for streams', () => {
