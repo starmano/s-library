@@ -79,7 +79,7 @@ test('posters can leave out the name or the icon', () => {
   assert.ok(icons.length > 90);
 });
 
-test('Samsung and LG TVs get folder pages with the titles as a list, and TV links', () => {
+test('Samsung and LG TVs get folder pages with the titles as a list', () => {
   const tv = { ...ctx, native: true, tv: true };
   const meta = addon.meta(library, 'slib:fav', tv);
   assert.equal(meta.behaviorHints, undefined, 'no default video: the TV shows the list of titles');
@@ -88,16 +88,12 @@ test('Samsung and LG TVs get folder pages with the titles as a list, and TV link
     { id: 'slib:fav:series:kitsu:1', title: 'Cowboy Bebop', thumbnail: 'https://example.com/bebop.jpg' }
   ]);
   assert.equal(addon.catalog(library, 'slib', {}, tv).metas[0].behaviorHints, undefined);
-  // A title in that list opens it, with the link in the TV fields too.
-  assert.deepEqual(addon.stream(library, 'folder', 'slib:fav:movie:tt0133093', tv).streams, [{
-    name: '🎬 Open',
-    description: 'Open "The Matrix"',
-    thumbnail: 'https://images.metahub.space/poster/medium/tt0133093/img',
-    externalUrl: 'stremio:///detail/movie/tt0133093',
-    androidTvUrl: 'stremio:///detail/movie/tt0133093',
-    tizenUrl: 'stremio:///detail/movie/tt0133093',
-    webosUrl: 'stremio:///detail/movie/tt0133093'
-  }]);
+  // Their own link fields start another TV app, so they stay empty (the server gives TVs the
+  // title's streams instead; see the server tests).
+  const [open] = addon.stream(library, 'folder', 'slib:fav:movie:tt0133093', tv).streams;
+  assert.equal(open.androidTvUrl, 'stremio:///detail/movie/tt0133093');
+  assert.equal(open.tizenUrl, undefined);
+  assert.equal(open.webosUrl, undefined);
   // Elsewhere, folder pages have no videos.
   assert.equal(addon.meta(library, 'slib:fav', ctx).videos, undefined);
 });

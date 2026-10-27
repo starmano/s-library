@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const http = require('node:http');
 const assert = require('node:assert/strict');
 const { startFakeApi } = require('./fake-stremio-api');
 const S = require('../src/shared');
@@ -249,6 +250,47 @@ test('shows each account the requests its Stremio apps made, without auth keys',
   // Other accounts see only their own.
   assert.deepEqual((await get(`/${S.encodeConfig({ k: 'someone-else' })}/recent.json`)).body.requests, []);
   assert.equal((await get('/nope/recent.json')).res.status, 404);
+});
+
+test('on a TV, a title in a folder plays with streams from the account\'s other addons', async (t) => {
+  // A stream addon like the ones Stremio users install, and one that offers no movies.
+  const asked = [];
+  const streamAddon = http.createServer((req, res) => {
+    asked.push(req.url);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ streams: req.url === '/stream/movie/tt0133093.json' ? [{ name: 'Fake\n1080p', url: 'https://example.com/matrix.mp4' }, { infoHash: 'a'.repeat(40) }] : [] }));
+  });
+  await new Promise((resolve) => streamAddon.listen(0, '127.0.0.1', resolve));
+  t.after(() => streamAddon.close());
+  const addonBase = `http://127.0.0.1:${streamAddon.address().port}`;
+  process.env.ALLOW_PRIVATE_ADDON_URLS = '1';
+  t.after(() => delete process.env.ALLOW_PRIVATE_ADDON_URLS);
+  api.collection.addons = [
+    { transportUrl: `${base}/${config}/manifest.json`, manifest: { id: 'community.slibrary', name: 'S-library', resources: ['stream'], types: ['movie'] } },
+    { transportUrl: `${addonBase}/manifest.json`, manifest: { id: 'fake.streams', name: 'Fake streams', resources: ['stream'], types: ['movie', 'series'], idPrefixes: ['tt'] } },
+    { transportUrl: `${addonBase}/other/manifest.json`, manifest: { id: 'fake.tv', name: 'TV only', resources: [{ name: 'stream', types: ['tv'] }], types: ['movie'] } }
+  ];
+  const tv = { 'user-agent': 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 5.0) AppleWebKit/537.36' };
+  const { streams } = await (await fetch(`${base}/${config}/stream/folder/${encodeURIComponent('slib:fav:movie:tt0133093')}.json`, { headers: tv })).json();
+  assert.deepEqual(streams, [
+    { name: 'Fake\n1080p', url: 'https://example.com/matrix.mp4' },
+    { name: 'Fake streams', infoHash: 'a'.repeat(40) }
+  ]);
+  assert.deepEqual(asked, ['/stream/movie/tt0133093.json'], 'only addons that serve movies are asked, and not S-library');
+  // Elsewhere the same entry opens the title's page.
+  const phone = (await get(`/${config}/stream/folder/${encodeURIComponent('slib:fav:movie:tt0133093')}.json`)).body.streams;
+  assert.equal(phone[0].externalUrl, 'stremio:///detail/movie/tt0133093');
+});
+
+test('only asks addons on public https addresses for streams', () => {
+  const { reachableAddon } = require('../src/stremio-api');
+  assert.equal(reachableAddon('https://torrentio.strem.fun/config/manifest.json'), true);
+  for (const url of ['http://addon.example/manifest.json', 'https://localhost/manifest.json', 'https://127.0.0.1:7000/manifest.json',
+    'https://192.168.1.5/manifest.json', 'https://10.0.0.2/manifest.json', 'https://172.20.0.1/manifest.json', 'https://[::1]/manifest.json',
+    'https://nas.local/manifest.json', 'https://addon.example/other.json', 'not a url']) {
+    assert.equal(reachableAddon(url), false, url);
+  }
+  assert.equal(reachableAddon('https://fd-addon.example/manifest.json'), true, 'a host name, not an address');
 });
 
 test('limits sign-in attempts per client', async () => {

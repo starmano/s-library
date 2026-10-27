@@ -138,9 +138,10 @@ function opensStreams(meta) {
   return { ...meta, behaviorHints: { ...meta.behaviorHints, defaultVideoId: meta.id } };
 }
 
-// Stremio on Samsung and LG TVs shows a folder's stream list as loading forever: its entries
-// only link to other pages, which those apps seem to leave out. So TVs get folder pages with
-// the titles as an episode-style list instead, which they show (see folderMeta).
+// Stremio on Samsung and LG TVs can't open a page from a stream-list entry (it only plays
+// videos or starts other TV apps), so a folder's stream list doesn't work there. TVs get folder
+// pages with the titles as an episode-style list instead (see folderMeta), and each title plays
+// from there with streams from the account's other addons (see otherStreams in stremio-api.js).
 function folderPreview(folder, ctx) {
   const count = folder.items.length;
   return (ctx.tv ? (meta) => meta : opensStreams)({
@@ -365,19 +366,19 @@ function actionLink(ctx, verb, folderId, type, id) {
   return `${ctx.actionUrl}/${verb}/${folderId}/${encodeURIComponent(type)}/${encodeURIComponent(id)}`;
 }
 
-// Stremio's TV apps read their own link fields on stream-list entries; they get the same link.
-function withTvLinks({ streams }, ctx) {
+// Stremio on Android TV reads its own link field on stream-list entries; it gets the same link.
+// (Samsung's and LG's fields start another TV app, so S-library leaves them empty.)
+function withTvLinks({ streams }) {
   return {
     streams: streams.map((entry) => {
       if (!entry.externalUrl || !entry.externalUrl.startsWith('stremio:')) return entry;
-      const url = entry.externalUrl;
-      return { ...entry, androidTvUrl: url, ...(ctx.tv ? { tizenUrl: url, webosUrl: url } : {}) };
+      return { ...entry, androidTvUrl: entry.externalUrl };
     })
   };
 }
 
 function stream(library, type, id, ctx) {
-  return withTvLinks(streamList(library, type, id, ctx), ctx);
+  return withTvLinks(streamList(library, type, id, ctx));
 }
 
 function streamList({ folders, settings }, type, id, ctx) {

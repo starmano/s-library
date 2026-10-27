@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.15.0 — 2026-10-27
+
+- Samsung and LG TVs: picking a title in a folder shows its streams from your other addons, so it plays straight from the folder. (Stremio on those TVs can't open a movie's page from there; it offered to leave Stremio instead.)
+
 ## 1.14.0 — 2026-10-27
 
 - Samsung and LG TVs: a folder's page lists its titles with pictures, instead of loading forever. The links in S-library's entries are also given to the TV apps in the form they read. Open the configure page once so folders in your Library get the change too.

@@ -71,6 +71,7 @@ docker run -p 7000:7000 s-library
 | --- | --- | --- |
 | `PORT` | `7000` | Port to listen on. |
 | `PUBLIC_URL` | from the request (`Host` / `X-Forwarded-*`) | Public base URL, e.g. `https://s-library.example.com`, if the addon sits behind a proxy that doesn't send forwarding headers. |
+| `ALLOW_PRIVATE_ADDON_URLS` | not set | Lets S-library ask addons on `http` or private addresses for streams (see TVs below). For testing. |
 
 ### Hosting on cPanel
 
@@ -132,7 +133,8 @@ The addon then reads those items through the Stremio API and serves:
 - **meta** for `slib:` ids: the folder page, with links to its titles and to edit it. It has no videos, and `behaviorHints.defaultVideoId` is its own id, so Stremio shows its stream list straight away. Stremio on Samsung and LG TVs (recognised by their `Tizen` / `webOS` user agents) shows a stream list of links as loading forever, so TVs get the folder's titles as videos instead, without a default video,
 - **meta** for `slib:do:<action>:<folder id>:<version>[:<argument>]` ids: the page an edit link or card opens. Asking for it makes the change through the Stremio API (`src/actions.js`) and returns the folder page with the outcome. Changes to the folder itself only apply when `<version>` matches the folder's current version.
 - **stream** for every movie and show: one entry per folder, to add the title, plus **New folder**. In the Stremio apps each entry opens an `slib:do:` page. Stremio Web sends an `Origin` header and opens entries in a new tab, so it gets `/<config>/act/add/<folder>/<type>/<id>` instead, which adds the title and shows a confirmation page. A title's name and poster come from your library, or from Cinemeta.
-- every stream entry that links to a Stremio page also carries that link in `androidTvUrl` (and, on Samsung and LG TVs, `tizenUrl` and `webosUrl`), the fields Stremio's TV apps read,
+- every stream entry that links to a Stremio page also carries that link in `androidTvUrl`, the field Stremio on Android TV reads,
+- **on Samsung and LG TVs**, Stremio can't open a page from a stream entry (it offers to leave Stremio and start another TV app instead). So there a folder page lists its titles as videos, and picking one asks the account's other installed stream addons for that title's streams, the way Stremio itself would, and shows them: the title plays straight from the folder. A series plays from where it was left, or from its first episode. Only addons on public `https` addresses are asked,
 - **stream** for a folder (and for the pages its edit links open): **🖼️ Show as posters**, which opens the folder's row in Discover, then one entry per title that opens it. A title opened from a stream list loses its way back in Stremio, and the Android app shows no pictures there; the grid has both. With folders left out of Discover, only the titles are listed. Stremio Web opens stream entries in a new tab, so it gets Stremio Web addresses.
 
 Folder posters (with the folder's name and icon), backgrounds and the logo are PNGs drawn by the addon itself and cached in memory. Names are written in Plus Jakarta Sans, the font Stremio's own interface uses, which is bundled in `fonts/` under the SIL Open Font License (`fonts/OFL.txt`). Icons are a selection of [Phosphor Icons](https://phosphoricons.com) (fill style, MIT license, `icons/LICENSE`).
@@ -163,6 +165,7 @@ Stremio keeps its own copy of each installed addon's manifest, and Board rows co
 - Signing in and saving go through the addon's server to the Stremio API (`api.strem.io`). Your password is passed on and never stored. The server keeps nothing on disk and writes no logs. In memory it keeps the last 40 requests each account's Stremio apps made (when, which app, what it asked for, how it went; no auth keys or IP addresses), which the configure page shows to that account under **Recent requests from Stremio**, to find out why an app doesn't work. Restarting the server clears them.
 - Sign-in attempts are limited to 10 per minute per IP address.
 - Whoever runs the server can see the auth keys in the addon links it receives. For full control, host S-library yourself.
+- On Samsung and LG TVs, the server asks your other installed addons for a title's streams on the TV's behalf (see How it works). Their addon links, which can hold their own settings or keys, then pass through the server too, the same way they pass through Stremio's.
 
 ## Limitations
 

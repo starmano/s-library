@@ -212,6 +212,13 @@ async function resourceRoute(req, res, [, configSegment, resource, type, rawId, 
   if (!config || (type !== 'folder' && !titles)) return nothing();
   const action = resource === 'meta' && addon.parseAction(id);
   if (action) return sendJson(res, 200, { meta: await actionPageMeta(config.k, id, action, ctx) });
+  // On TVs, a title in a folder's list gets its streams from the account's other addons, so it
+  // plays from the folder (see otherStreams).
+  const video = resource === 'stream' && ctx.tv && addon.parseVideoId(id);
+  if (video) {
+    const playId = await stremio.playableId(config.k, video.type, video.itemId);
+    return sendJson(res, 200, { streams: await stremio.otherStreams(config.k, video.type, playId).catch(() => []) });
+  }
   // Without the folders (e.g. Stremio is unreachable) show nothing rather than something wrong.
   const library = await stremio.getLibrary(config.k).catch(() => null);
   if (!library) return nothing();

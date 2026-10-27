@@ -153,9 +153,90 @@ async function describeTitle(authKey, type, id) {
   return { id, type, name: id };
 }
 
+// ---- Streams from the account's other addons ----
+//
+// Stremio on Samsung and LG TVs can't open a title's page from a stream-list entry (it offers to
+// leave Stremio instead), so there a title in a folder gets its streams from the other addons
+// installed in the account, the way Stremio itself asks them, to play it from the folder.
+
+const STREAM_TIMEOUT = 10 * 1000;
+
+// Addons S-library may ask: https, and not on this computer or a private network (unless
+// ALLOW_PRIVATE_ADDON_URLS is set, e.g. for tests).
+function reachableAddon(transportUrl) {
+  let url;
+  try {
+    url = new URL(transportUrl);
+  } catch (_) {
+    return false;
+  }
+  if (!url.pathname.endsWith('/manifest.json')) return false;
+  if (process.env.ALLOW_PRIVATE_ADDON_URLS) return url.protocol === 'https:' || url.protocol === 'http:';
+  if (url.protocol !== 'https:') return false;
+  const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (host.includes(':')) return !(host === '::1' || /^f[cd]/.test(host) || host.startsWith('fe80:'));
+  return !(host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || /^(0|10|127)\./.test(host) ||
+    /^169\.254\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host));
+}
+
+// Whether an addon's manifest offers streams for this title. A resource given as an object
+// uses only its own types and id prefixes; one given by name uses the manifest's.
+function servesStreams(manifest, type, id) {
+  return (Array.isArray(manifest.resources) ? manifest.resources : []).some((resource) => {
+    const full = resource && typeof resource === 'object';
+    if ((full ? resource.name : resource) !== 'stream') return false;
+    const types = (full ? resource.types : manifest.types) || [];
+    const prefixes = full ? resource.idPrefixes : manifest.idPrefixes;
+    return types.includes(type) && (!Array.isArray(prefixes) || prefixes.some((prefix) => id.startsWith(prefix)));
+  });
+}
+
+// The video to play for a title: a series continues where it was left, or starts at the
+// first episode.
+async function playableId(authKey, type, id) {
+  if (type !== 'series') return id;
+  const [item] = await call('datastoreGet', { authKey, collection: 'libraryItem', ids: [id], all: false }).catch(() => []);
+  const last = item && item.state && item.state.video_id;
+  if (typeof last === 'string' && last.startsWith(`${id}:`)) return last;
+  return /^tt\d+$/.test(id) ? `${id}:1:1` : `${id}:1`;
+}
+
+async function otherStreams(authKey, type, id) {
+  const { addons } = await call('addonCollectionGet', { authKey, update: false });
+  const sources = (Array.isArray(addons) ? addons : []).filter((addon) => addon && addon.manifest &&
+    addon.manifest.id !== 'community.slibrary' && reachableAddon(addon.transportUrl) && servesStreams(addon.manifest, type, id));
+  const lists = await Promise.all(sources.map(async (addon) => {
+    const base = addon.transportUrl.slice(0, -'/manifest.json'.length);
+    try {
+      const res = await fetch(`${base}/stream/${encodeURIComponent(type)}/${encodeURIComponent(id)}.json`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(STREAM_TIMEOUT)
+      });
+      const { streams } = await res.json();
+      return (Array.isArray(streams) ? streams : [])
+        .filter((stream) => stream && typeof stream === 'object')
+        .map((stream) => ({ ...stream, name: stream.name || addon.manifest.name }));
+    } catch (_) {
+      return [];
+    }
+  }));
+  return lists.flat();
+}
+
 function isSLibrary(addon, baseUrl) {
   return Boolean(addon && addon.manifest && addon.manifest.id === 'community.slibrary' &&
     typeof addon.transportUrl === 'string' && addon.transportUrl.startsWith(`${baseUrl}/`) && addon.transportUrl.endsWith('/manifest.json'));
 }
 
-module.exports = { request, getLibrary, forgetFolders, editLibrary, describeTitle, updateInstalledManifest, userId };
+module.exports = {
+  request,
+  getLibrary,
+  forgetFolders,
+  editLibrary,
+  describeTitle,
+  updateInstalledManifest,
+  userId,
+  playableId,
+  otherStreams,
+  reachableAddon
+};
