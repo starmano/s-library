@@ -1,7 +1,7 @@
 // Minimal client for the Stremio account API (the same API the Stremio apps use).
 'use strict';
 
-const { ID_PREFIX, fromLibraryItems, readSettings, migrationItems } = require('./shared');
+const { ID_PREFIX, fromLibraryItems, readSettings, migrationItems, playbackResetItems } = require('./shared');
 
 const API_URL = (process.env.STREMIO_API_URL || 'https://api.strem.io').replace(/\/+$/, '') + '/api/';
 // Stremio's official catalog addon, for the names and posters of movies and series.
@@ -50,12 +50,14 @@ async function save(authKey, changes, previous) {
   if (lost) throw new Error("Stremio didn't store this change.");
 }
 
-// The items by id, brought up to date first (see migrationItems in shared.js). If that fails,
-// they are read as they are.
+// The items by id, brought up to date first (see migrationItems and playbackResetItems in
+// shared.js). If that fails, they are read as they are.
 async function loadCurrent(authKey) {
   const previous = new Map((await loadItems(authKey)).map((item) => [item._id, item]));
-  const migration = migrationItems(previous);
-  if (migration.length > 0) await save(authKey, migration, previous).catch(() => {});
+  for (const fix of [migrationItems, playbackResetItems]) {
+    const changes = fix(previous);
+    if (changes.length > 0) await save(authKey, changes, previous).catch(() => {});
+  }
   return previous;
 }
 

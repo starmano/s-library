@@ -2,6 +2,10 @@
 
 The configure page shows the newest entry here. For a new version, raise `version` in `package.json` and add a section at the top; a test checks that the two match.
 
+## 1.16.0 — 2026-10-28
+
+- Folders no longer keep watch progress. After a movie was played from a folder on a TV, Stremio opened that folder on the movie (on every device) and showed it in Continue Watching; S-library now clears that, so folders open as folders. A movie played from a folder starts from the beginning next time.
+
 ## 1.15.1 — 2026-10-27
 
 - After a movie was played from a folder on a TV, opening that folder (for example from the Library) showed only that movie. It shows all of them again.

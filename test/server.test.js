@@ -295,6 +295,16 @@ test('only asks addons on public https addresses for streams', () => {
   assert.equal(reachableAddon('https://fd-addon.example/manifest.json'), true, 'a host name, not an address');
 });
 
+test('clears watch progress Stremio stored on a folder', async () => {
+  // What Stremio writes after a title was played from the folder on a TV.
+  const fav = api.library.get('slib:fav');
+  const played = { ...fav, state: { ...fav.state, video_id: 'slib:fav:movie:tt0133093', timeOffset: 600000, duration: 8160000 } };
+  await post('/api/datastorePut', { authKey: 'test-auth-key', collection: 'libraryItem', changes: [played] });
+  await get(`/${config}/catalog/folder/slib.json`);
+  const state = api.library.get('slib:fav').state;
+  assert.deepEqual([state.video_id, state.timeOffset, state.duration], [null, 0, 0]);
+});
+
 test('limits sign-in attempts per client', async () => {
   const headers = { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' };
   const attempt = () => fetch(`${base}/api/login`, { method: 'POST', headers, body: JSON.stringify({ email: 'x', password: 'y' }) });

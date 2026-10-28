@@ -183,6 +183,21 @@ test("Stremio's own \"Remove from library\" takes a folder out of the Library wi
   assert.equal(library.get('slib:abc123').removed, false);
 });
 
+test('watch progress Stremio puts on a folder is cleared', () => {
+  const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
+  assert.deepEqual(S.playbackResetItems(library), [], 'nothing to clear');
+  // A title played from the folder on a TV: Stremio stores it as the folder's progress.
+  const played = library.get('slib:abc123');
+  played.state = { ...played.state, video_id: 'slib:abc123:movie:tt0133093', timeOffset: 600000, duration: 8160000, timesWatched: 1 };
+  const [reset] = S.playbackResetItems(library);
+  assert.equal(reset._id, 'slib:abc123');
+  assert.deepEqual([reset.state.video_id, reset.state.timeOffset, reset.state.timesWatched], [null, 0, 0]);
+  assert.equal(reset.state.lastWatched, played.state.lastWatched, 'the rest of the state stays');
+  assert.equal(reset.name, 'Favorites');
+  save(library, [reset]);
+  assert.deepEqual(S.playbackResetItems(library), []);
+});
+
 test('a deleted folder stays deleted whether folders are shown or hidden', () => {
   const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
   save(library, S.settingsItems({ library: false }, { previous: library }));

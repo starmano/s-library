@@ -320,6 +320,24 @@
     return readSettings(previous.values()).keep ? [] : settingsItems({}, Object.assign({}, options, { previous }));
   }
 
+  // Stremio keeps watch progress on whatever it plays. A title played from a folder on a TV is
+  // played as one of the folder's videos, so the folder gets the progress: Stremio then opens the
+  // folder on that title (from the Library or Continue Watching) instead of as a folder. Folders
+  // don't keep progress; these items clear it.
+  const PLAYBACK = { video_id: null, timeOffset: 0, timeWatched: 0, overallTimeWatched: 0, timesWatched: 0, flaggedWatched: 0, duration: 0 };
+
+  function playbackResetItems(previous, options) {
+    const now = ((options && options.now) || new Date()).toISOString();
+    const changes = [];
+    previous.forEach((item, id) => {
+      const ref = parseId(id);
+      if (!ref || ref.kind !== 'folder' || item.type !== TYPE || !item.state) return;
+      if (Object.keys(PLAYBACK).every((key) => !item.state[key])) return;
+      changes.push(libraryItem(id, { state: Object.assign({}, item.state, PLAYBACK) }, item, now));
+    });
+    return changes;
+  }
+
   // The addon URL carries a small base64url JSON config: { k: <Stremio auth key> }.
   function encodeConfig(config) {
     return btoa(JSON.stringify(config)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -357,6 +375,7 @@
     deletionItems,
     settingsItems,
     migrationItems,
+    playbackResetItems,
     encodeConfig,
     decodeConfig
   };
