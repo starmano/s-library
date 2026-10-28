@@ -183,6 +183,36 @@ test("Stremio's own \"Remove from library\" takes a folder out of the Library wi
   assert.equal(library.get('slib:abc123').removed, false);
 });
 
+test('watch progress Stremio puts on a folder moves to the title it belongs to', () => {
+  const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
+  const played = library.get('slib:abc123');
+  const lastWatched = '2026-10-27T21:00:00.000Z';
+  played.state = { ...played.state, lastWatched, video_id: 'slib:abc123:movie:tt0133093', timeOffset: 600000, duration: 8160000, timeWatched: 600000 };
+  assert.deepEqual(S.playedTitles(library).map((p) => [p.type, p.id]), [['movie', 'tt0133093']]);
+  const now = new Date('2026-10-28T08:00:00Z');
+
+  // Not in the Library yet: kept the way Stremio keeps such a title, so it's in Continue Watching.
+  const [item] = S.progressItems(library, new Map(), { now });
+  assert.equal(item._id, 'tt0133093');
+  assert.deepEqual([item.type, item.name, item.poster, item.removed, item.temp], ['movie', 'The Matrix', 'https://example.com/matrix.jpg', true, true]);
+  assert.deepEqual([item.state.video_id, item.state.timeOffset, item.state.duration, item.state.lastWatched], ['tt0133093', 600000, 8160000, lastWatched]);
+  assert.equal(item.behaviorHints.defaultVideoId, 'tt0133093');
+
+  // In the Library: it stays there, with the progress.
+  const inLibrary = { _id: 'tt0133093', type: 'movie', name: 'The Matrix', removed: false, temp: false, state: { lastWatched: '2026-01-01T00:00:00.000Z', timesWatched: 1, overallTimeWatched: 100 } };
+  const [updated] = S.progressItems(library, new Map([['tt0133093', inLibrary]]), { now });
+  assert.deepEqual([updated.removed, updated.temp, updated.state.timeOffset, updated.state.timesWatched, updated.state.overallTimeWatched], [false, false, 600000, 1, 100]);
+
+  // Watched more recently on its own: left alone.
+  const newer = { ...inLibrary, state: { ...inLibrary.state, lastWatched: '2026-10-28T07:00:00.000Z' } };
+  assert.deepEqual(S.progressItems(library, new Map([['tt0133093', newer]]), { now }), []);
+
+  // A series continues with its episode.
+  played.state.video_id = 'slib:abc123:series:tt0903747';
+  const [series] = S.progressItems(library, new Map(), { now });
+  assert.equal(series.state.video_id, 'tt0903747:1:1');
+});
+
 test('watch progress Stremio puts on a folder is cleared', () => {
   const library = save(new Map(), S.toLibraryItems(folder, { baseUrl: BASE, previous: new Map() }));
   assert.deepEqual(S.playbackResetItems(library), [], 'nothing to clear');

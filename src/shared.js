@@ -322,8 +322,8 @@
 
   // Stremio keeps watch progress on whatever it plays. A title played from a folder on a TV is
   // played as one of the folder's videos, so the folder gets the progress: Stremio then opens the
-  // folder on that title (from the Library or Continue Watching) instead of as a folder. Folders
-  // don't keep progress; these items clear it.
+  // folder on that title (from the Library or Continue Watching) instead of as a folder. So the
+  // progress is moved to the title (see progressItems), and these items clear it from folders.
   const PLAYBACK = { video_id: null, timeOffset: 0, timeWatched: 0, overallTimeWatched: 0, timesWatched: 0, flaggedWatched: 0, duration: 0 };
 
   function playbackResetItems(previous, options) {
@@ -334,6 +334,66 @@
       if (!ref || ref.kind !== 'folder' || item.type !== TYPE || !item.state) return;
       if (Object.keys(PLAYBACK).every((key) => !item.state[key])) return;
       changes.push(libraryItem(id, { state: Object.assign({}, item.state, PLAYBACK) }, item, now));
+    });
+    return changes;
+  }
+
+  // The titles that progress on folders belongs to: their video ids look like
+  // "slib:<folder id>:<type>:<title id>" (see addon.js).
+  function playedTitles(previous) {
+    const played = [];
+    previous.forEach((item, id) => {
+      const ref = parseId(id);
+      if (!ref || ref.kind !== 'folder' || item.type !== TYPE || !item.state) return;
+      const { video_id: videoId, timeOffset, timesWatched, flaggedWatched } = item.state;
+      if (typeof videoId !== 'string' || !videoId.startsWith(id + ':') || !(timeOffset > 0 || timesWatched > 0 || flaggedWatched > 0)) return;
+      const rest = videoId.slice(id.length + 1);
+      const split = rest.indexOf(':');
+      if (split > 0) played.push({ folder: item, type: rest.slice(0, split), id: rest.slice(split + 1) });
+    });
+    return played;
+  }
+
+  // Library items that give those titles the progress, the way Stremio keeps progress of a title
+  // that's not in the Library: removed, but temporary, so it shows in Continue Watching. Titles
+  // with newer progress of their own are left alone. `titles` maps title ids to their library
+  // items, if any.
+  function progressItems(previous, titles, options) {
+    const now = ((options && options.now) || new Date()).toISOString();
+    const changes = [];
+    playedTitles(previous).forEach(({ folder, type, id }) => {
+      const before = titles.get(id);
+      const own = (before && before.state) || {};
+      const played = folder.state;
+      if (before && time(own.lastWatched) >= time(played.lastWatched)) return;
+      const record = previous.get(folder._id + ':title:' + type + ':' + id) || {};
+      // A series continues with the episode it was at, or starts with the first (as in addon.js).
+      const episode = typeof own.video_id === 'string' && own.video_id.startsWith(id + ':')
+        ? own.video_id
+        : /^tt\d+$/.test(id) ? id + ':1:1' : id + ':1';
+      const fields = {
+        type,
+        state: Object.assign({}, libraryItem(id, {}, null, now).state, own, {
+          lastWatched: played.lastWatched || now,
+          video_id: type === 'series' ? episode : id,
+          timeOffset: played.timeOffset || 0,
+          duration: played.duration || 0,
+          timeWatched: played.timeWatched || 0,
+          overallTimeWatched: (own.overallTimeWatched || 0) + (played.overallTimeWatched || 0),
+          timesWatched: (own.timesWatched || 0) + (played.timesWatched || 0),
+          flaggedWatched: Math.max(own.flaggedWatched || 0, played.flaggedWatched || 0)
+        })
+      };
+      if (!before) {
+        Object.assign(fields, {
+          name: record.name || id,
+          poster: record.poster || null,
+          removed: true,
+          temp: true,
+          behaviorHints: { defaultVideoId: type === 'series' ? null : id, featuredVideoId: null, hasScheduledVideos: false }
+        });
+      }
+      changes.push(libraryItem(id, fields, before, now));
     });
     return changes;
   }
@@ -376,6 +436,8 @@
     settingsItems,
     migrationItems,
     playbackResetItems,
+    playedTitles,
+    progressItems,
     encodeConfig,
     decodeConfig
   };

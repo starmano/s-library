@@ -516,18 +516,11 @@
     renderInstall();
     // Folders saved by an earlier version, or through another address, get their library
     // poster brought up to date (it carries the folder's name and this server's address), and
-    // the account gets the one-time update described at migrationItems in shared.js.
-    // Watch progress that Stremio put on a folder is cleared too (see playbackResetItems).
-    const raw = new Map(state.raw);
-    const updates = new Map();
-    const apply = (items) => items.forEach((item) => {
-      raw.set(item._id, item);
-      updates.set(item._id, item);
-    });
-    apply(S.migrationItems(raw));
-    apply(S.playbackResetItems(raw));
-    apply(state.folders.flatMap((folder) => S.toLibraryItems(folder, { baseUrl: location.origin, previous: raw })));
-    if (updates.size) put(Array.from(updates.values())).catch(() => {});
+    // the account gets the one-time update described at migrationItems in shared.js. (Watch
+    // progress on folders is moved to its titles by the server, the next time it reads them.)
+    const outdated = S.migrationItems(state.raw).concat(state.folders.flatMap((folder) =>
+      S.toLibraryItems(folder, { baseUrl: location.origin, previous: state.raw })));
+    if (outdated.length) put(outdated).catch(() => {});
     else refreshInstalledAddon().catch(() => {});
     openFromLink();
   }

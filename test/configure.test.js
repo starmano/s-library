@@ -189,15 +189,9 @@ test('create, edit, reorder and delete folders from the configure page', { skip:
 
   // Reopening from Stremio's "Configure" button signs in from the addon link and shows
   // the folders as stored, titles included; then delete one.
-  // A title was played from a folder on a TV in the meantime: Stremio stored it on the folder.
-  const playedId = [...api.library.keys()].find((id) => /^slib:[a-z0-9]+$/.test(id) && api.library.get(id).type === 'folder');
-  api.library.get(playedId).state = { ...api.library.get(playedId).state, video_id: `${playedId}:movie:tt1375666`, timeOffset: 1000 };
   await page.goto(`${base}/${config}/configure`);
   await page.waitForSelector('#app:not([hidden])');
   assert.deepEqual(await page.locator('.folder-meta').allTextContents(), ['1 title', '2 titles']);
-  // Opening the page clears it, so the folder opens as a folder again.
-  for (let i = 0; i < 50 && api.library.get(playedId).state.timeOffset !== 0; i++) await new Promise((resolve) => setTimeout(resolve, 100));
-  assert.deepEqual([api.library.get(playedId).state.video_id, api.library.get(playedId).state.timeOffset], [null, 0]);
   page.once('dialog', (dialog) => dialog.accept());
   await page.click('.folder >> nth=0 >> text=Edit');
   await page.click('#f-delete');

@@ -1,7 +1,7 @@
 // Minimal client for the Stremio account API (the same API the Stremio apps use).
 'use strict';
 
-const { ID_PREFIX, fromLibraryItems, readSettings, migrationItems, playbackResetItems } = require('./shared');
+const { ID_PREFIX, fromLibraryItems, readSettings, migrationItems, playbackResetItems, playedTitles, progressItems } = require('./shared');
 
 const API_URL = (process.env.STREMIO_API_URL || 'https://api.strem.io').replace(/\/+$/, '') + '/api/';
 // Stremio's official catalog addon, for the names and posters of movies and series.
@@ -50,15 +50,28 @@ async function save(authKey, changes, previous) {
   if (lost) throw new Error("Stremio didn't store this change.");
 }
 
-// The items by id, brought up to date first (see migrationItems and playbackResetItems in
-// shared.js). If that fails, they are read as they are.
+// The items by id, brought up to date first (see migrationItems, progressItems and
+// playbackResetItems in shared.js). If that fails, they are read as they are.
 async function loadCurrent(authKey) {
   const previous = new Map((await loadItems(authKey)).map((item) => [item._id, item]));
-  for (const fix of [migrationItems, playbackResetItems]) {
-    const changes = fix(previous);
-    if (changes.length > 0) await save(authKey, changes, previous).catch(() => {});
-  }
+  const migration = migrationItems(previous);
+  if (migration.length > 0) await save(authKey, migration, previous).catch(() => {});
+  await moveProgress(authKey, previous).catch(() => {});
   return previous;
+}
+
+// Watch progress on folders goes to the titles it belongs to, then off the folders. If giving
+// it to the titles fails, the folders keep it until the next try.
+async function moveProgress(authKey, previous) {
+  const reset = playbackResetItems(previous);
+  if (reset.length === 0) return;
+  const ids = playedTitles(previous).map((played) => played.id);
+  if (ids.length > 0) {
+    const titles = await call('datastoreGet', { authKey, collection: 'libraryItem', ids, all: false });
+    const changes = progressItems(previous, new Map(titles.map((item) => [item._id, item])));
+    if (changes.length > 0) await call('datastorePut', { authKey, collection: 'libraryItem', changes });
+  }
+  await save(authKey, reset, previous);
 }
 
 function readLibrary(items) {

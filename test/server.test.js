@@ -295,14 +295,17 @@ test('only asks addons on public https addresses for streams', () => {
   assert.equal(reachableAddon('https://fd-addon.example/manifest.json'), true, 'a host name, not an address');
 });
 
-test('clears watch progress Stremio stored on a folder', async () => {
+test('moves watch progress Stremio stored on a folder to the title, then clears it', async () => {
   // What Stremio writes after a title was played from the folder on a TV.
   const fav = api.library.get('slib:fav');
-  const played = { ...fav, state: { ...fav.state, video_id: 'slib:fav:movie:tt0133093', timeOffset: 600000, duration: 8160000 } };
+  const played = { ...fav, state: { ...fav.state, lastWatched: new Date().toISOString(), video_id: 'slib:fav:movie:tt0133093', timeOffset: 600000, duration: 8160000 } };
   await post('/api/datastorePut', { authKey: 'test-auth-key', collection: 'libraryItem', changes: [played] });
   await get(`/${config}/catalog/folder/slib.json`);
   const state = api.library.get('slib:fav').state;
   assert.deepEqual([state.video_id, state.timeOffset, state.duration], [null, 0, 0]);
+  // The Matrix wasn't in the Library: it's now kept for Continue Watching, with the progress.
+  const matrix = api.library.get('tt0133093');
+  assert.deepEqual([matrix.name, matrix.removed, matrix.temp, matrix.state.video_id, matrix.state.timeOffset], ['The Matrix', true, true, 'tt0133093', 600000]);
 });
 
 test('limits sign-in attempts per client', async () => {
